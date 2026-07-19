@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "md-drf-codegen"
+version = "0.1.0"
+description = "Extract and validate DRF API intermediate YAML from Markdown specifications"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.6",
+  "PyYAML>=6.0",
+  "typer>=0.12",
+  "Jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  "types-PyYAML>=6.0",
+  "Django>=5.0,<6",
+  "djangorestframework>=3.15",
+]
+
+[project.scripts]
+md-drf-codegen = "md_drf_codegen.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+md_drf_codegen = ["templates/*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "examples/generated"]
+pythonpath = ["src", "examples"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+extend-exclude = ["examples/generated"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "src"
+packages = ["md_drf_codegen"]
+warn_unused_configs = true
