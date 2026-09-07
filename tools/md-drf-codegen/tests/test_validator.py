@@ -59,3 +59,15 @@ def test_unknown_field_type() -> None:
     )
     with pytest.raises(SchemaValidationError):
         validate_api_spec(spec)
+
+
+def test_numeric_constraint_on_string_rejected() -> None:
+    from md_drf_codegen.schema.constraints import FieldConstraints
+
+    spec = _minimal_spec()
+    spec.types["ProductDetailResponse"].fields["productId"].constraints = FieldConstraints(
+        min=1,
+        max=50,
+    )
+    with pytest.raises(SchemaValidationError):
+        validate_api_spec(spec)

@@ -8,6 +8,7 @@ from md_drf_codegen.errors import SchemaValidationError, TypeReferenceError
 from md_drf_codegen.normalize import is_primitive_type, strip_array_suffix
 from md_drf_codegen.schema import ApiSpec
 from md_drf_codegen.schema.api import SUPPORTED_HTTP_METHODS
+from md_drf_codegen.schema.constraints import FieldConstraints
 from md_drf_codegen.yaml_io import load_api_spec_yaml
 
 KNOWN_FIELD_TYPES: frozenset[str] = frozenset(
@@ -31,6 +32,7 @@ def validate_api_spec(spec: ApiSpec) -> list[str]:
     _assert_supported_methods(spec)
     _assert_unique_type_names(spec)
     _assert_known_field_types(spec)
+    _assert_field_constraints(spec)
     _assert_api_type_references(spec)
     _assert_property_type_references(spec)
     _assert_non_empty_types(spec, warnings)
@@ -112,6 +114,77 @@ def _assert_known_field_types(spec: ApiSpec) -> None:
                     section="types",
                     fix="Define the custom type or use a supported primitive.",
                 )
+
+
+def _assert_field_constraints(spec: ApiSpec) -> None:
+    for type_name, type_def in spec.types.items():
+        for field_name, field_def in type_def.fields.items():
+            if field_def.constraints is None or field_def.constraints.is_empty():
+                continue
+            _validate_constraints_for_field(
+                field_def.constraints,
+                base_type=strip_array_suffix(field_def.type),
+                context=f"types.{type_name}.{field_name}",
+            )
+
+
+def _validate_constraints_for_field(
+    constraints: FieldConstraints,
+    *,
+    base_type: str,
+    context: str,
+) -> None:
+    numeric_keys = constraints.min is not None or constraints.max is not None
+    string_keys = (
+        constraints.min_length is not None
+        or constraints.max_length is not None
+        or constraints.format is not None
+        or constraints.pattern is not None
+    )
+
+    if base_type in {"integer", "number", "decimal"}:
+        if string_keys:
+            raise SchemaValidationError(
+                f"String constraints are not allowed on numeric field {context}.",
+                section="types",
+                fix="Use min/max or a range like 1-50 for numeric fields.",
+            )
+    elif base_type == "string":
+        if numeric_keys:
+            raise SchemaValidationError(
+                f"Numeric range constraints are not allowed on string field {context}.",
+                section="types",
+                fix="Use 最大N文字, minLength, maxLength, or 半角英数字 for strings.",
+            )
+    else:
+        raise SchemaValidationError(
+            f"Constraints are not supported on type '{base_type}' at {context}.",
+            section="types",
+            fix="Apply constraints only to string, integer, or number fields.",
+        )
+
+    if (
+        constraints.min is not None
+        and constraints.max is not None
+        and constraints.min > constraints.max
+    ):
+        raise SchemaValidationError(
+            f"min ({constraints.min}) cannot exceed max ({constraints.max}) at {context}.",
+            section="types",
+            fix="Ensure min <= max.",
+        )
+
+    if (
+        constraints.min_length is not None
+        and constraints.max_length is not None
+        and constraints.min_length > constraints.max_length
+    ):
+        raise SchemaValidationError(
+            f"minLength ({constraints.min_length}) cannot exceed "
+            f"maxLength ({constraints.max_length}) at {context}.",
+            section="types",
+            fix="Ensure minLength <= maxLength.",
+        )
 
 
 def _assert_api_type_references(spec: ApiSpec) -> None:

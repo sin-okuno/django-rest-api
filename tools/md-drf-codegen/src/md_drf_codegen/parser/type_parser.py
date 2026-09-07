@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from md_drf_codegen.errors import SchemaValidationError
 from md_drf_codegen.normalize import normalize_cell, normalize_nullable_type
+from md_drf_codegen.parser.constraint_parser import parse_constraints_cell
 from md_drf_codegen.parser.markdown_parser import TYPE_HEADERS, find_section, find_table
 from md_drf_codegen.schema import FieldDefinition, MarkdownDocument, TypeDefinition
 
@@ -54,11 +55,19 @@ def parse_type_definitions(document: MarkdownDocument) -> dict[str, TypeDefiniti
         nullable_cell = normalize_cell(row.get("Nullable", ""))
         nullable = _to_bool(nullable_cell) if nullable_cell else normalized.nullable
         required = _to_bool(row.get("必須", "true"))
+        constraints = parse_constraints_cell(
+            row.get("制約", ""),
+            type_name=type_name,
+            field_name=prop_name,
+            field_type=normalized.type,
+            line=table.line,
+        )
 
         field_def = FieldDefinition(
             type=normalized.type,
             required=required,
             nullable=nullable,
+            constraints=constraints,
         )
 
         type_fields = buckets.setdefault(type_name, {})

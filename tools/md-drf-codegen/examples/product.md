@@ -10,16 +10,16 @@
 
 ## 型定義
 
-| 型名 | プロパティ | 型 | 必須 | Nullable |
-| --- | --- | --- | --- | --- |
-| ProductListResponse | items | ProductSummary[] | true | false |
-| ProductSummary | productId | string | true | false |
-| ProductSummary | productName | string | true | false |
-| ProductDetailResponse | productId | string | true | false |
-| ProductDetailResponse | productName | string | true | false |
-| ProductDetailResponse | description | string | false | true |
-| ProductDetailResponse | price | number | true | false |
-| ProductDetailResponse | revision | integer | true | false |
-| ProductUpdateRequest | productName | string | true | false |
-| ProductUpdateRequest | price | number | true | false |
-| ProductUpdateRequest | revision | integer | true | false |
+| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 |
+| --- | --- | --- | --- | --- | --- |
+| ProductListResponse | items | ProductSummary[] | true | false | - |
+| ProductSummary | productId | string | true | false | 半角英数字, 最大20文字 |
+| ProductSummary | productName | string | true | false | 最大50文字 |
+| ProductDetailResponse | productId | string | true | false | 半角英数字, 最大20文字 |
+| ProductDetailResponse | productName | string | true | false | 最大50文字 |
+| ProductDetailResponse | description | string | false | true | 最大200文字 |
+| ProductDetailResponse | price | number | true | false | 1-999999 |
+| ProductDetailResponse | revision | integer | true | false | 1-50 |
+| ProductUpdateRequest | productName | string | true | false | 最大50文字 |
+| ProductUpdateRequest | price | number | true | false | 1-999999 |
+| ProductUpdateRequest | revision | integer | true | false | 1-50 |

@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from md_drf_codegen.schema.constraints import FieldConstraints
+
 
 class FieldDefinition(BaseModel):
     """A single field on a DTO type."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     type: str = Field(min_length=1)
     required: bool = True
     nullable: bool = False
+    constraints: FieldConstraints | None = None
 
     @field_validator("type", mode="before")
     @classmethod

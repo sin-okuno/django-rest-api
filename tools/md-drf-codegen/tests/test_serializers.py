@@ -57,3 +57,55 @@ def test_nested_serializer() -> None:
     code = next(iter(files.values()))
     assert "ChildSerializer" in code
     ast.parse(code)
+
+
+def test_integer_range_constraint() -> None:
+    from md_drf_codegen.schema.constraints import FieldConstraints
+
+    spec = _spec_with_types(
+        {
+            "Sample": TypeDefinition(
+                fields={
+                    "revision": FieldDefinition(
+                        type="integer",
+                        required=True,
+                        nullable=False,
+                        constraints=FieldConstraints(min=1, max=50),
+                    )
+                }
+            )
+        }
+    )
+    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
+    code = next(iter(files.values()))
+    assert "min_value=1" in code
+    assert "max_value=50" in code
+    ast.parse(code)
+
+
+def test_string_alphanumeric_constraint() -> None:
+    from md_drf_codegen.schema.constraints import FieldConstraints, StringFormat
+
+    spec = _spec_with_types(
+        {
+            "Sample": TypeDefinition(
+                fields={
+                    "productId": FieldDefinition(
+                        type="string",
+                        required=True,
+                        nullable=False,
+                        constraints=FieldConstraints(
+                            format=StringFormat.ALPHANUMERIC,
+                            max_length=20,
+                        ),
+                    )
+                }
+            )
+        }
+    )
+    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
+    code = next(iter(files.values()))
+    assert "RegexValidator" in code
+    assert "max_length=20" in code
+    assert r"^[A-Za-z0-9]+$" in code
+    ast.parse(code)

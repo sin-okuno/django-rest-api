@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 from rest_framework import serializers
+{% if needs_regex_validator %}
+from django.core.validators import RegexValidator
+{% endif %}
 {% for serializer in serializers %}
 
 

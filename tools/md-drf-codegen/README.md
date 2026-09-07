@@ -33,9 +33,21 @@ pip install -e ".[dev]"
 最低限以下のセクションが必要です。
 
 - `## API一覧` — API ID, API名, メソッド, パス, リクエスト型, レスポンス型
-- `## 型定義` — 型名, プロパティ, 型, 必須, Nullable
+- `## 型定義` — 型名, プロパティ, 型, 必須, Nullable, **制約**（任意）
 
-`-` は `null` として扱います。
+`-` は `null` / 制約なしとして扱います。
+
+### 制約列の記法
+
+| 種別 | 記法例 | 生成される DRF 設定 |
+|------|--------|---------------------|
+| 数値範囲 | `1-50`, `1〜50` | `min_value=1`, `max_value=50` |
+| 数値下限/上限 | `min:1`, `max:50`, `1以上`, `50以下` | `min_value` / `max_value` |
+| 文字列長 | `最大50文字`, `maxLength:50` | `max_length=50` |
+| 文字列形式 | `半角英数字`, `alphanumeric` | `RegexValidator` |
+| 正規表現 | `pattern:^[A-Z]+$` | `RegexValidator` |
+
+複数指定は `,` / `;` / `、` で区切ります（例: `半角英数字, 最大20文字`）。
 
 ## YAML 仕様
 
@@ -55,6 +67,16 @@ types:
         type: string
         required: true
         nullable: false
+        constraints:
+          format: halfwidth-alphanumeric
+          maxLength: 20
+      revision:
+        type: integer
+        required: true
+        nullable: false
+        constraints:
+          min: 1
+          max: 50
 ```
 
 ## CLI

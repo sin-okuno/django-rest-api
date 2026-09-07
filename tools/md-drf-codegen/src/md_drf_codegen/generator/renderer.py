@@ -29,7 +29,10 @@ def _environment() -> Environment:
 
 def render_serializers(context: SerializersModuleContext) -> str:
     template = _environment().get_template("serializers.py.j2")
-    return template.render(serializers=context.serializers)
+    return template.render(
+        serializers=context.serializers,
+        needs_regex_validator=context.needs_regex_validator,
+    )
 
 
 def render_views(context: ViewsModuleContext) -> str:
