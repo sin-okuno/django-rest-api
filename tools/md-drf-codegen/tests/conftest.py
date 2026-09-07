@@ -1,4 +1,4 @@
-"""Shared fixtures: product-structure.md から一時 YAML を抽出する。"""
+"""Shared fixtures."""
 
 from __future__ import annotations
 
@@ -10,12 +10,11 @@ from md_drf_codegen.extract import extract_from_markdown
 from md_drf_codegen.yaml_io import write_api_spec_yaml
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-SPEC_MD = PACKAGE_ROOT / "examples" / "specs" / "product-structure.md"
+PRODUCT_MD = PACKAGE_ROOT / "examples" / "product.md"
 
 
 @pytest.fixture(scope="session")
-def product_structure_yaml(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """examples/specs/product-structure.md を extract した YAML パス。"""
-    out = tmp_path_factory.mktemp("spec") / "product-structure.yaml"
-    write_api_spec_yaml(extract_from_markdown(SPEC_MD), out)
+def product_spec_yaml(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    out = tmp_path_factory.mktemp("spec") / "product-api.yaml"
+    write_api_spec_yaml(extract_from_markdown(PRODUCT_MD), out)
     return out

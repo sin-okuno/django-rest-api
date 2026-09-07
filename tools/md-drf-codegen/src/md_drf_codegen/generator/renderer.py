@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import json
 from importlib import resources
-from typing import Any
 
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
-from md_drf_codegen.generator.context import SerializersModuleContext
-from md_drf_codegen.generator.handlers_context import HandlersModuleContext
-from md_drf_codegen.generator.tests_context import TestsModuleContext
-from md_drf_codegen.generator.urls_context import UrlsModuleContext
-from md_drf_codegen.generator.views_context import ViewsModuleContext
+from md_drf_codegen.generator.context_builder import SerializersModuleContext
+from md_drf_codegen.generator.test_generator import TestsModuleContext
+from md_drf_codegen.generator.url_generator import UrlsModuleContext
+from md_drf_codegen.generator.view_generator import ViewsModuleContext
 
 
 def _environment() -> Environment:
@@ -30,98 +28,66 @@ def _environment() -> Environment:
 
 
 def render_serializers(context: SerializersModuleContext) -> str:
-    """Render serializers.py from a prepared context."""
     template = _environment().get_template("serializers.py.j2")
-    payload: dict[str, Any] = {
-        "title": context.title,
-        "source": context.source,
-        "serializers": context.serializers,
-    }
-    return template.render(**payload)
+    return template.render(serializers=context.serializers)
 
 
 def render_views(context: ViewsModuleContext) -> str:
     template = _environment().get_template("views.py.j2")
     return template.render(
-        title=context.title,
-        source=context.source,
         views=context.views,
         serializer_imports=context.serializer_imports,
-        handler_imports=context.handler_imports,
         serializers_module=context.serializers_module,
-        handlers_module=context.handlers_module,
     )
 
 
 def render_urls(context: UrlsModuleContext) -> str:
     template = _environment().get_template("urls.py.j2")
     return template.render(
-        title=context.title,
-        source=context.source,
         patterns=context.patterns,
         views_module=context.views_module,
     )
 
 
-def render_handlers(context: HandlersModuleContext) -> str:
-    template = _environment().get_template("handlers.py.j2")
+def render_test_serializers(context: TestsModuleContext) -> str:
+    template = _environment().get_template("test_serializers.py.j2")
     return template.render(
-        title=context.title,
-        source=context.source,
-        handlers=context.handlers,
+        package_name=context.package_name,
+        serializers_module=context.serializers_module,
+        serializer_imports=context.serializer_imports,
+        serializer_valid=context.serializer_valid,
+        serializer_missing=context.serializer_missing,
+        serializer_invalid_type=context.serializer_invalid_type,
+        serializer_nullable=context.serializer_nullable,
     )
 
 
-# Backward-compatible alias
-render_handler_registry = render_handlers
+def render_test_urls(context: TestsModuleContext) -> str:
+    template = _environment().get_template("test_urls.py.j2")
+    return template.render(url_resolve=context.url_resolve)
 
 
-def render_tests(context: TestsModuleContext) -> str:
-    template = _environment().get_template("test_generated_api.py.j2")
+def render_test_views(context: TestsModuleContext) -> str:
+    template = _environment().get_template("test_views.py.j2")
     return template.render(
-        title=context.title,
-        source=context.source,
         package_name=context.package_name,
-        serializers_module=context.serializers_module,
         views_module=context.views_module,
-        handlers_module=context.handlers_module,
-        serializer_valid=context.serializer_valid,
-        serializer_missing=context.serializer_missing,
-        serializer_nullable=context.serializer_nullable,
-        serializer_nested=context.serializer_nested,
-        url_resolve=context.url_resolve,
-        get_handler=context.get_handler,
-        put_validation=context.put_validation,
-        response_serializer=context.response_serializer,
-        bad_request=context.bad_request,
-        unregistered=context.unregistered,
-        serializer_imports=context.serializer_imports,
         view_imports=context.view_imports,
-        handler_imports=context.handler_imports,
+        view_method=context.view_method,
+        view_bad_request=context.view_bad_request,
     )
 
 
 def render_conftest(context: TestsModuleContext) -> str:
     template = _environment().get_template("conftest.py.j2")
-    return template.render(
-        title=context.title,
-        source=context.source,
-        package_name=context.package_name,
-        serializers_module=context.serializers_module,
-        views_module=context.views_module,
-        handlers_module=context.handlers_module,
-    )
+    return template.render(package_name=context.package_name)
 
 
-def render_package_init(context: TestsModuleContext) -> str:
+def render_package_init() -> str:
     template = _environment().get_template("__init__.py.j2")
-    return template.render(
-        title=context.title,
-        source=context.source,
-    )
+    return template.render()
 
 
 def template_package_available() -> bool:
-    """Return True when packaged Jinja2 templates are importable."""
     root = resources.files("md_drf_codegen")
     return (root / "templates" / "serializers.py.j2").is_file()

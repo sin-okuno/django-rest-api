@@ -9,7 +9,7 @@ import yaml
 from pydantic import ValidationError
 
 from md_drf_codegen.errors import SchemaValidationError
-from md_drf_codegen.models import ApiSpec
+from md_drf_codegen.schema import ApiSpec
 
 YAML_HEADER = (
     "# AUTO-GENERATED FILE.\n"
@@ -63,7 +63,7 @@ def parse_api_spec_yaml(raw: str, *, source_path: str = "<memory>") -> ApiSpec:
     if not isinstance(data, dict):
         raise SchemaValidationError(
             "YAML root must be a mapping.",
-            fix=f"Ensure {source_path} starts with version/title/apis/types keys.",
+            fix=f"Ensure {source_path} starts with version/apis/types keys.",
         )
 
     try:

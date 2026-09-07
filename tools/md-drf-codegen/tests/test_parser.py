@@ -1,54 +1,102 @@
-"""Tests for Markdown parsing of API一覧 and 型定義."""
+"""Parser tests."""
 
 from __future__ import annotations
 
 import pytest
 
-from md_drf_codegen.errors import MissingSectionError
-from md_drf_codegen.parser import find_section, find_table, parse_markdown_content
+from md_drf_codegen.errors import MissingSectionError, SchemaValidationError
+from md_drf_codegen.parser import (
+    parse_api_endpoints,
+    parse_markdown_content,
+    parse_type_definitions,
+)
 
-SAMPLE = """# サンプル API
+
+def test_parse_api_list() -> None:
+    content = """# Sample
 
 ## API一覧
 
-| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 | 説明 |
-| --- | --- | --- | --- | --- | --- | --- |
-| getItem | 取得 | GET | /api/items/{id} | - | ItemResponse | 1件取得 |
-| createItem | 作成 | POST | /api/items | ItemRequest | ItemResponse | 作成 |
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
+| --- | --- | --- | --- | --- | --- |
+| getProduct | 詳細 | GET | /api/products/{productId} | - | ProductDetailResponse |
 
 ## 型定義
 
-| カテゴリー | 型名 | プロパティ | 型 | 任意 | 説明 |
-| --- | --- | --- | --- | --- | --- |
-| api | ItemRequest | name | string | false | 名前 |
-| api | ItemRequest | note | string \\| null | true | 備考 |
-| api | ItemResponse | id | string | false | ID |
-| view | ItemView | name | string | false | 画面用 |
+| 型名 | プロパティ | 型 | 必須 | Nullable |
+| --- | --- | --- | --- | --- |
+| ProductDetailResponse | productId | string | true | false |
 """
+    doc = parse_markdown_content(content, source_path="sample.md")
+    apis = parse_api_endpoints(doc)
+    assert len(apis) == 1
+    assert apis[0].id == "getProduct"
+    assert apis[0].request_type is None
 
 
-def test_parse_required_sections() -> None:
-    doc = parse_markdown_content(SAMPLE, source_path="sample.md")
-    assert doc.title == "サンプル API"
-    assert {s.heading for s in doc.sections} >= {"API一覧", "型定義"}
-
-
-def test_parse_api_table() -> None:
-    doc = parse_markdown_content(SAMPLE, source_path="sample.md")
-    table = find_table(find_section(doc, "API一覧"), ["API ID", "メソッド", "パス"])
-    assert len(table.rows) == 2
-    assert table.rows[0]["API ID"] == "getItem"
-    assert table.rows[0]["メソッド"] == "GET"
-    assert table.rows[1]["パス"] == "/api/items"
-
-
-def test_parse_type_table_with_escaped_pipe() -> None:
-    doc = parse_markdown_content(SAMPLE, source_path="sample.md")
-    table = find_table(find_section(doc, "型定義"), ["カテゴリー", "型名", "プロパティ", "型"])
-    note_row = next(row for row in table.rows if row["プロパティ"] == "note")
-    assert note_row["型"] == "string | null"
-
-
-def test_missing_section_raises() -> None:
+def test_missing_api_section_raises() -> None:
+    content = "# T\n\n## 型定義\n\n| 型名 | プロパティ | 型 | 必須 | Nullable |\n"
     with pytest.raises(MissingSectionError):
-        parse_markdown_content("# Only Title\n\n## その他\n\ntext\n", source_path="bad.md")
+        parse_markdown_content(content, source_path="x.md")
+
+
+def test_dash_becomes_null() -> None:
+    content = """# T
+
+## API一覧
+
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
+| --- | --- | --- | --- | --- | --- |
+| listProducts | 一覧 | GET | /api/products | - | ProductList |
+
+## 型定義
+
+| 型名 | プロパティ | 型 | 必須 | Nullable |
+| --- | --- | --- | --- | --- |
+| ProductList | items | string[] | true | false |
+"""
+    doc = parse_markdown_content(content, source_path="x.md")
+    apis = parse_api_endpoints(doc)
+    assert apis[0].request_type is None
+
+
+def test_unsupported_method_raises() -> None:
+    content = """# T
+
+## API一覧
+
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
+| --- | --- | --- | --- | --- | --- |
+| deleteProduct | 削除 | DELETE | /api/products/1 | - | null |
+
+## 型定義
+
+| 型名 | プロパティ | 型 | 必須 | Nullable |
+| --- | --- | --- | --- | --- |
+"""
+    doc = parse_markdown_content(content, source_path="x.md")
+    with pytest.raises(SchemaValidationError):
+        parse_api_endpoints(doc)
+
+
+def test_parse_type_definitions() -> None:
+    content = """# T
+
+## API一覧
+
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
+| --- | --- | --- | --- | --- | --- |
+| getProduct | 詳細 | GET | /api/x | - | ProductDetailResponse |
+
+## 型定義
+
+| 型名 | プロパティ | 型 | 必須 | Nullable |
+| --- | --- | --- | --- | --- |
+| ProductDetailResponse | productId | string | true | false |
+| ProductDetailResponse | description | string | false | true |
+"""
+    doc = parse_markdown_content(content, source_path="x.md")
+    types = parse_type_definitions(doc)
+    assert "ProductDetailResponse" in types
+    assert types["ProductDetailResponse"].fields["description"].nullable is True
+    assert types["ProductDetailResponse"].fields["description"].required is False

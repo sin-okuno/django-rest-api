@@ -1,4 +1,4 @@
-"""CLI integration tests for extract / validate / generate."""
+"""CLI integration tests."""
 
 from __future__ import annotations
 
@@ -9,20 +9,22 @@ from typer.testing import CliRunner
 
 from md_drf_codegen.cli import app
 
-FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "specs" / "product-structure.md"
+FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "product.md"
 runner = CliRunner()
 
 
 def test_extract_command(tmp_path: Path) -> None:
-    output = tmp_path / "product-structure.yaml"
+    output = tmp_path / "product-api.yaml"
     result = runner.invoke(app, ["extract", str(FIXTURE), "-o", str(output)])
     assert result.exit_code == 0, result.output
     assert output.exists()
-    assert "Wrote" in result.output
+    text = output.read_text(encoding="utf-8")
+    assert "getProduct" in text
+    assert "types:" in text
 
 
 def test_validate_command(tmp_path: Path) -> None:
-    output = tmp_path / "product-structure.yaml"
+    output = tmp_path / "product-api.yaml"
     extract = runner.invoke(app, ["extract", str(FIXTURE), "-o", str(output)])
     assert extract.exit_code == 0, extract.output
     result = runner.invoke(app, ["validate", str(output)])
@@ -36,7 +38,6 @@ def test_validate_fails_on_bad_file(tmp_path: Path) -> None:
         "\n".join(
             [
                 "version: 1",
-                "title: t",
                 "apis:",
                 "  - id: badId",
                 "    name: x",
@@ -44,8 +45,7 @@ def test_validate_fails_on_bad_file(tmp_path: Path) -> None:
                 "    path: /x",
                 "    requestType: Missing",
                 "    responseType: null",
-                "    description: ''",
-                "types: []",
+                "types: {}",
             ]
         ),
         encoding="utf-8",
@@ -54,61 +54,86 @@ def test_validate_fails_on_bad_file(tmp_path: Path) -> None:
     assert result.exit_code == 1
 
 
-def test_generate_command(tmp_path: Path) -> None:
-    yaml_out = tmp_path / "product-structure.yaml"
+def test_generate_serializer_target(tmp_path: Path) -> None:
+    yaml_out = tmp_path / "product-api.yaml"
     extract = runner.invoke(app, ["extract", str(FIXTURE), "-o", str(yaml_out)])
     assert extract.exit_code == 0, extract.output
 
-    out_dir = tmp_path / "generated"
-    result = runner.invoke(app, ["generate", str(yaml_out), "-o", str(out_dir)])
-    assert result.exit_code == 0, result.output
-    assert "Wrote" in result.output
-
-    expected = (
-        "__init__.py",
-        "product_structure_serializers.py",
-        "product_structure_views.py",
-        "urls.py",
-        "product_structure_handlers.py",
-        "conftest.py",
-        "test_generated_api.py",
+    out_dir = tmp_path / "product"
+    result = runner.invoke(
+        app,
+        ["generate", str(yaml_out), "-o", str(out_dir), "--target", "serializer"],
     )
-    for name in expected:
+    assert result.exit_code == 0, result.output
+    ser_file = out_dir / "product_serializers.py"
+    assert ser_file.exists()
+    ast.parse(ser_file.read_text(encoding="utf-8"))
+
+
+def test_generate_all_target(tmp_path: Path) -> None:
+    yaml_out = tmp_path / "product-api.yaml"
+    extract = runner.invoke(app, ["extract", str(FIXTURE), "-o", str(yaml_out)])
+    assert extract.exit_code == 0, extract.output
+
+    out_dir = tmp_path / "product"
+    result = runner.invoke(
+        app,
+        ["generate", str(yaml_out), "-o", str(out_dir), "--target", "all"],
+    )
+    assert result.exit_code == 0, result.output
+
+    for name in (
+        "product_serializers.py",
+        "product_views.py",
+        "urls.py",
+        "test_serializers.py",
+        "test_urls.py",
+        "test_views.py",
+    ):
         path = out_dir / name
         assert path.exists(), name
         ast.parse(path.read_text(encoding="utf-8"))
 
-    views = (out_dir / "product_structure_views.py").read_text(encoding="utf-8")
-    assert "class ApiProductsProductIdView" in views
-    assert "def get(" in views
+    views = (out_dir / "product_views.py").read_text(encoding="utf-8")
+    assert "NotImplementedError" in views
     assert "def put(" in views
-    assert "product_id" in views
-    assert "from .product_structure_handlers import" in views
-
-    tests = (out_dir / "test_generated_api.py").read_text(encoding="utf-8")
-    assert "def test_" in tests
-    assert "pass" not in tests
-    assert "product_structure_serializers" in tests
 
 
-def test_generate_default_output_uses_yaml_stem(tmp_path: Path, monkeypatch) -> None:
-    """-o 省略時は examples/generated/<yaml-stem>/ に出力する。"""
-    from md_drf_codegen.commands import generate as generate_mod
+def test_generate_refuses_overwrite_without_force(tmp_path: Path) -> None:
+    yaml_out = tmp_path / "product-api.yaml"
+    runner.invoke(app, ["extract", str(FIXTURE), "-o", str(yaml_out)])
+    out_dir = tmp_path / "product"
+    gen_args = ["generate", str(yaml_out), "-o", str(out_dir), "--target", "serializer"]
+    first = runner.invoke(app, gen_args)
+    assert first.exit_code == 0
+    second = runner.invoke(app, gen_args)
+    assert second.exit_code == 1
+    assert "FILE_EXISTS_ERROR" in second.output
 
-    monkeypatch.setattr(generate_mod, "DEFAULT_GENERATED_DIR", tmp_path / "generated")
 
-    yaml_out = tmp_path / "product-structure.yaml"
-    extract = runner.invoke(app, ["extract", str(FIXTURE), "-o", str(yaml_out)])
-    assert extract.exit_code == 0, extract.output
-
-    result = runner.invoke(app, ["generate", str(yaml_out)])
+def test_generate_force_overwrites(tmp_path: Path) -> None:
+    yaml_out = tmp_path / "product-api.yaml"
+    runner.invoke(app, ["extract", str(FIXTURE), "-o", str(yaml_out)])
+    out_dir = tmp_path / "product"
+    runner.invoke(app, ["generate", str(yaml_out), "-o", str(out_dir), "--target", "serializer"])
+    result = runner.invoke(
+        app,
+        ["generate", str(yaml_out), "-o", str(out_dir), "--target", "serializer", "--force"],
+    )
     assert result.exit_code == 0, result.output
 
-    out_dir = tmp_path / "generated" / "product-structure"
-    assert (out_dir / "product_structure_serializers.py").exists()
-    assert (out_dir / "product_structure_views.py").exists()
-    assert (out_dir / "product_structure_handlers.py").exists()
-    conftest = (out_dir / "conftest.py").read_text(encoding="utf-8")
-    assert '_PACKAGE_NAME = "product_structure"' in conftest
-    tests = (out_dir / "test_generated_api.py").read_text(encoding="utf-8")
-    assert "from product_structure.product_structure_serializers import" in tests
+
+def test_build_command(tmp_path: Path, monkeypatch) -> None:
+    from md_drf_codegen.commands import build as build_mod
+    from md_drf_codegen.commands import extract as extract_mod
+    from md_drf_codegen.commands import generate as generate_mod
+
+    monkeypatch.setattr(extract_mod, "DEFAULT_GENERATED_SPECS_DIR", tmp_path / "generated-specs")
+    monkeypatch.setattr(generate_mod, "DEFAULT_GENERATED_DIR", tmp_path / "generated")
+    monkeypatch.setattr(build_mod, "DEFAULT_GENERATED_SPECS_DIR", tmp_path / "generated-specs")
+    monkeypatch.setattr(build_mod, "DEFAULT_GENERATED_DIR", tmp_path / "generated")
+
+    result = runner.invoke(app, ["build", str(FIXTURE), "--target", "all"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "generated-specs" / "product-api.yaml").exists()
+    assert (tmp_path / "generated" / "product" / "product_views.py").exists()
