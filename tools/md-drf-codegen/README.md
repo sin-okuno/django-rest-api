@@ -37,17 +37,144 @@ pip install -e ".[dev]"
 
 `-` は `null` / 制約なしとして扱います。
 
-### 制約列の記法
+### 制約列の凡例
 
-| 種別 | 記法例 | 生成される DRF 設定 |
-|------|--------|---------------------|
-| 数値範囲 | `1-50`, `1〜50` | `min_value=1`, `max_value=50` |
-| 数値下限/上限 | `min:1`, `max:50`, `1以上`, `50以下` | `min_value` / `max_value` |
-| 文字列長 | `最大50文字`, `maxLength:50` | `max_length=50` |
-| 文字列形式 | `半角英数字`, `alphanumeric` | `RegexValidator` |
-| 正規表現 | `pattern:^[A-Z]+$` | `RegexValidator` |
+`制約` 列は任意です。制約を付けない場合は `-` / `なし` / `null` / `制約なし` のいずれかを記載します。
 
-複数指定は `,` / `;` / `、` で区切ります（例: `半角英数字, 最大20文字`）。
+複数の制約は `,` / `;` / `、` で区切って指定できます。
+
+#### 制約なし
+
+| 記載値 | 意味 |
+|--------|------|
+| `-` | 制約なし |
+| `なし` | 制約なし |
+| `null` | 制約なし |
+| `制約なし` | 制約なし |
+
+#### 数値型（`integer` / `number`）向け
+
+| 記載値 | 意味 | 生成コード例 |
+|--------|------|--------------|
+| `1-50` | 1 以上 50 以下 | `min_value=1`, `max_value=50` |
+| `1〜50` | 1 以上 50 以下（全角チルダ可） | 同上 |
+| `1~50` | 1 以上 50 以下（半角チルダ可） | 同上 |
+| `min:1` | 下限 1 | `min_value=1` |
+| `max:50` | 上限 50 | `max_value=50` |
+| `1以上` | 下限 1 | `min_value=1` |
+| `50以下` | 上限 50 | `max_value=50` |
+| `>=1` | 下限 1 | `min_value=1` |
+| `<=50` | 上限 50 | `max_value=50` |
+| `1-999999` | 大きな範囲指定 | `min_value=1`, `max_value=999999` |
+| `0.1-99.9` | 小数を含む範囲（`number` 型） | `min_value=0.1`, `max_value=99.9` |
+
+**凡例（型定義テーブル）**
+
+```markdown
+| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 |
+| --- | --- | --- | --- | --- | --- |
+| ProductUpdateRequest | revision | integer | true | false | 1-50 |
+| ProductUpdateRequest | price | number | true | false | 1-999999 |
+| ProductUpdateRequest | discountRate | number | true | false | min:0, max:1 |
+```
+
+#### 文字列型（`string`）向け — 文字数
+
+| 記載値 | 意味 | 生成コード例 |
+|--------|------|--------------|
+| `最大50文字` | 最大 50 文字 | `max_length=50` |
+| `最大50文字以内` | 最大 50 文字 | `max_length=50` |
+| `最大50文字まで` | 最大 50 文字 | `max_length=50` |
+| `maxLength:50` | 最大 50 文字 | `max_length=50` |
+| `最大:50` | 最大 50 文字 | `max_length=50` |
+| `最小1文字` | 最小 1 文字 | `min_length=1` |
+| `minLength:1` | 最小 1 文字 | `min_length=1` |
+| `1文字以上` | 最小 1 文字 | `min_length=1` |
+
+**凡例（型定義テーブル）**
+
+```markdown
+| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 |
+| --- | --- | --- | --- | --- | --- |
+| ProductSummary | productName | string | true | false | 最大50文字 |
+| ProductDetailResponse | description | string | false | true | 最大200文字 |
+```
+
+#### 文字列型（`string`）向け — 形式
+
+| 記載値 | 意味 | 生成コード例 |
+|--------|------|--------------|
+| `半角英数字` | `[A-Za-z0-9]+` のみ許可 | `RegexValidator(regex='^[A-Za-z0-9]+$')` |
+| `alphanumeric` | 半角英数字（英語表記） | 同上 |
+| `ascii-alphanumeric` | 半角英数字（別名） | 同上 |
+| `halfwidth-alphanumeric` | 半角英数字（YAML 形式名） | 同上 |
+| `pattern:^[A-Z]+$` | 任意の正規表現 | `RegexValidator(regex='^[A-Z]+$')` |
+| `pattern:^[0-9]{3}-[0-9]{4}$` | 電話番号形式など | カスタム `RegexValidator` |
+
+**凡例（型定義テーブル）**
+
+```markdown
+| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 |
+| --- | --- | --- | --- | --- | --- |
+| ProductSummary | productId | string | true | false | 半角英数字, 最大20文字 |
+| ProductSummary | productCode | string | true | false | pattern:^[A-Z]{2}[0-9]{4}$ |
+```
+
+#### 複合指定の凡例
+
+| 記載値 | 適用先 | 説明 |
+|--------|--------|------|
+| `半角英数字, 最大20文字` | `string` | 形式 + 最大文字数 |
+| `最小1文字, 最大50文字` | `string` | 最小・最大文字数 |
+| `min:1, max:50` | `integer` / `number` | 下限・上限を個別指定 |
+
+#### 対応外（Validation Error）
+
+| 例 | 理由 |
+|----|------|
+| `1-50` を `string` 型に指定 | 数値範囲は `integer` / `number` のみ |
+| `最大50文字` を `integer` 型に指定 | 文字数制約は `string` のみ |
+| `半角英数字` を `integer` 型に指定 | 形式制約は `string` のみ |
+| `1-50` と `最大20文字` を同時指定 | 数値制約と文字列制約の混在は不可 |
+
+#### YAML で直接指定する場合
+
+Markdown の `制約` 列は、以下の YAML 構造に変換されます。
+
+```yaml
+revision:
+  type: integer
+  required: true
+  nullable: false
+  constraints:
+    min: 1
+    max: 50
+
+productId:
+  type: string
+  required: true
+  nullable: false
+  constraints:
+    format: halfwidth-alphanumeric   # alphanumeric も可
+    maxLength: 20
+    minLength: 1                     # 任意
+
+productCode:
+  type: string
+  required: true
+  nullable: false
+  constraints:
+    pattern: "^[A-Z]{2}[0-9]{4}$"
+```
+
+| YAML キー | 型 | 説明 |
+|-----------|-----|------|
+| `min` | number | 数値の下限（以上） |
+| `max` | number | 数値の上限（以下） |
+| `minLength` | integer | 文字列の最小文字数 |
+| `maxLength` | integer | 文字列の最大文字数 |
+| `format` | string | `alphanumeric` / `halfwidth-alphanumeric` |
+| `pattern` | string | 正規表現（`format` より優先） |
 
 ## YAML 仕様
 
