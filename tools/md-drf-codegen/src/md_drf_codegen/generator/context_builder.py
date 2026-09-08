@@ -120,6 +120,7 @@ def _build_field_context(
             required=required,
             allow_null=allow_null,
             constraints=field_def.constraints,
+            error_messages=field_def.error_messages,
         )
         return FieldRenderContext(name=name, expression=expression, deferred=False), uses_regex
 
@@ -139,9 +140,18 @@ def _bool(value: bool) -> str:
     return "True" if value else "False"
 
 
+def _error_messages_part(error_messages: dict[str, str] | None) -> list[str]:
+    if not error_messages:
+        return []
+    items = ", ".join(f"{repr(key)}: {repr(value)}" for key, value in error_messages.items())
+    return [f"error_messages={{{items}}}"]
+
+
 def _constraint_parts(
     base: str,
     constraints: FieldConstraints | None,
+    *,
+    error_messages: dict[str, str] | None = None,
 ) -> tuple[list[str], bool]:
     if constraints is None or constraints.is_empty():
         return [], False
@@ -161,7 +171,8 @@ def _constraint_parts(
             parts.append(f"max_length={constraints.max_length}")
         resolved = constraints.resolved_pattern()
         if resolved is not None:
-            regex, message = resolved
+            regex, default_message = resolved
+            message = (error_messages or {}).get("pattern", default_message)
             escaped_regex = repr(regex)
             escaped_message = repr(message)
             parts.append(
@@ -187,6 +198,7 @@ def _primitive_expression(
     required: bool,
     allow_null: bool,
     constraints: FieldConstraints | None,
+    error_messages: dict[str, str] | None = None,
 ) -> tuple[str, bool]:
     if base not in PRIMITIVE_FIELD_CLASS:
         raise SchemaValidationError(
@@ -196,17 +208,38 @@ def _primitive_expression(
         )
 
     field_cls = PRIMITIVE_FIELD_CLASS[base]
-    constraint_parts, uses_regex = _constraint_parts(base, constraints)
-    base_kwargs = _kwargs_parts(required, allow_null) + constraint_parts
+    constraint_parts, uses_regex = _constraint_parts(
+        base,
+        constraints,
+        error_messages=_serializer_error_messages_for_field(error_messages),
+    )
+    base_kwargs = (
+        _kwargs_parts(required, allow_null)
+        + constraint_parts
+        + _error_messages_part(_serializer_error_messages_for_field(error_messages))
+    )
     kwargs = ", ".join(base_kwargs)
 
     if many:
-        child_kwargs = ", ".join(_kwargs_parts(True, False) + constraint_parts)
+        child_kwargs = ", ".join(
+            _kwargs_parts(True, False)
+            + constraint_parts
+            + _error_messages_part(_serializer_error_messages_for_field(error_messages))
+        )
         child_expr = f"{field_cls}({child_kwargs})"
         list_kwargs = ", ".join(_kwargs_parts(required, allow_null))
         return f"serializers.ListField(child={child_expr}, {list_kwargs})", uses_regex
 
     return f"{field_cls}({kwargs})", uses_regex
+
+
+def _serializer_error_messages_for_field(
+    error_messages: dict[str, str] | None,
+) -> dict[str, str] | None:
+    if not error_messages:
+        return None
+    filtered = {key: value for key, value in error_messages.items() if key != "pattern"}
+    return filtered or None
 
 
 def _nested_expression(

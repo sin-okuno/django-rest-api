@@ -81,6 +81,12 @@
 | loadDetail | 製品詳細取得 | GET | /api/products/{productId} | - | ProductDetailApiResponse | 製品詳細を取得する |
 | updateDetail | 製品詳細更新 | PUT | /api/products/{productId} | ProductUpdateApiRequest | ProductDetailApiResponse | 製品詳細を更新する |
 
+## パスパラメータ
+
+| パラメータ名 | 型 | 制約 |
+| --- | --- | --- |
+| productId | string | 最大50文字 |
+
 ## Store構成
 
 | 項目 | 値 |

@@ -24,6 +24,7 @@ app = typer.Typer(
 
 class TargetOption(StrEnum):
     YAML = "yaml"
+    OPENAPI = "openapi"
     SERIALIZER = "serializer"
     ALL = "all"
 
@@ -46,7 +47,7 @@ OutputDir = Annotated[
 ]
 Target = Annotated[
     TargetOption,
-    typer.Option("--target", help="生成ターゲット: yaml / serializer / all"),
+    typer.Option("--target", help="生成ターゲット: yaml / openapi / serializer / all"),
 ]
 Force = Annotated[
     bool,
@@ -94,7 +95,7 @@ def generate_command(
     force: Force = False,
     check: Check = False,
 ) -> None:
-    """YAML から Serializer / View / URL / 基本テストを生成する。"""
+    """YAML から Serializer / View / URL / OpenAPI / 基本テストを生成する。"""
     try:
         results = run_generate(
             yaml_path,

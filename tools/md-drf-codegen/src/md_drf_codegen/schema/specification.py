@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from md_drf_codegen.schema.api import ApiEndpoint
+from md_drf_codegen.schema.path_parameter import PathParameterDefinition
 from md_drf_codegen.schema.type_definition import TypeDefinition
 
 
@@ -18,6 +19,10 @@ class ApiSpec(BaseModel):
     version: Literal[1] = 1
     apis: list[ApiEndpoint] = Field(default_factory=list)
     types: dict[str, TypeDefinition] = Field(default_factory=dict)
+    path_parameters: dict[str, PathParameterDefinition] = Field(
+        default_factory=dict,
+        alias="pathParameters",
+    )
 
 
 class MarkdownTable(BaseModel):

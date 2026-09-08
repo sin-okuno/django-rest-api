@@ -36,6 +36,23 @@ def run_generate(
         yaml_output.write_text(yaml_text, encoding="utf-8")
         return [yaml_output.resolve()]
 
+    if generate_target == GenerateTarget.OPENAPI:
+        openapi_output = _resolve_openapi_output(output, yaml_path=input_abs)
+        files = generate_from_yaml(input_abs, target=generate_target)
+        content = files["openapi.yaml"]
+        if check:
+            from md_drf_codegen.utils.file_utils import _check_files
+
+            _check_files({openapi_output.name: content}, openapi_output.parent)
+            return [openapi_output.resolve()]
+        if openapi_output.exists() and not force:
+            from md_drf_codegen.utils.file_utils import FileExistsError
+
+            raise FileExistsError(openapi_output.resolve())
+        openapi_output.parent.mkdir(parents=True, exist_ok=True)
+        openapi_output.write_text(content, encoding="utf-8", newline="\n")
+        return [openapi_output.resolve()]
+
     output_dir = _resolve_output_dir(output, yaml_stem=input_abs.stem)
     package_name = sanitize_module_name(output_dir.name)
     files = generate_from_yaml(input_abs, target=generate_target, package_name=package_name)
@@ -49,3 +66,12 @@ def _resolve_output_dir(output: Path | None, *, yaml_stem: str) -> Path:
     if resolved.suffix == ".py":
         return resolved.parent
     return resolved
+
+
+def _resolve_openapi_output(output: Path | None, *, yaml_path: Path) -> Path:
+    if output is None:
+        return (yaml_path.parent / f"{yaml_path.stem}.openapi.yaml").resolve()
+    resolved = output.resolve()
+    if resolved.suffix in {".yaml", ".yml", ".json"}:
+        return resolved
+    return (resolved / "openapi.yaml").resolve()

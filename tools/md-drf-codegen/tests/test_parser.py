@@ -8,6 +8,7 @@ from md_drf_codegen.errors import MissingSectionError, SchemaValidationError
 from md_drf_codegen.parser import (
     parse_api_endpoints,
     parse_markdown_content,
+    parse_path_parameters,
     parse_type_definitions,
 )
 
@@ -79,6 +80,32 @@ def test_unsupported_method_raises() -> None:
         parse_api_endpoints(doc)
 
 
+def test_parse_legacy_type_definitions() -> None:
+    content = """# T
+
+## API一覧
+
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
+| --- | --- | --- | --- | --- | --- |
+| loadDetail | 詳細 | GET | /api/products/{productId} | - | ProductDetailApiResponse |
+
+## 型定義
+
+| カテゴリー | 型名 | プロパティ | 型 | 任意 | 最大桁数 | 小数桁 | 説明 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| api | ProductDetailApiResponse | productId | string | false | 50 | - | ID |
+| view | ProductDetail | productId | string | false | 50 | - | ignored |
+"""
+    doc = parse_markdown_content(content, source_path="legacy.md")
+    types = parse_type_definitions(doc)
+    assert "ProductDetailApiResponse" in types
+    assert "ProductDetail" not in types
+    field = types["ProductDetailApiResponse"].fields["productId"]
+    assert field.required is True
+    assert field.constraints is not None
+    assert field.constraints.max_length == 50
+
+
 def test_parse_type_definitions() -> None:
     content = """# T
 
@@ -100,3 +127,32 @@ def test_parse_type_definitions() -> None:
     assert "ProductDetailResponse" in types
     assert types["ProductDetailResponse"].fields["description"].nullable is True
     assert types["ProductDetailResponse"].fields["description"].required is False
+
+
+def test_parse_path_parameters() -> None:
+    content = """# T
+
+## API一覧
+
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
+| --- | --- | --- | --- | --- | --- |
+| getProduct | 詳細 | GET | /api/products/{productId} | - | ProductDetailResponse |
+
+## パスパラメータ
+
+| パラメータ名 | 型 | 制約 |
+| --- | --- | --- |
+| productId | string | 半角英数字, 最大20文字 |
+
+## 型定義
+
+| 型名 | プロパティ | 型 | 必須 | Nullable |
+| --- | --- | --- | --- | --- |
+| ProductDetailResponse | productId | string | true | false |
+"""
+    doc = parse_markdown_content(content, source_path="x.md")
+    path_params = parse_path_parameters(doc)
+    assert "productId" in path_params
+    assert path_params["productId"].param_type == "string"
+    assert path_params["productId"].constraints is not None
+    assert path_params["productId"].constraints.max_length == 20

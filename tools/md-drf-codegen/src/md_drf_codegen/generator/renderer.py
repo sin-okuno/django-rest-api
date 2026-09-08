@@ -8,6 +8,7 @@ from importlib import resources
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
 from md_drf_codegen.generator.context_builder import SerializersModuleContext
+from md_drf_codegen.generator.path_validator_generator import PathValidatorsModuleContext
 from md_drf_codegen.generator.test_generator import TestsModuleContext
 from md_drf_codegen.generator.url_generator import UrlsModuleContext
 from md_drf_codegen.generator.view_generator import ViewsModuleContext
@@ -35,12 +36,22 @@ def render_serializers(context: SerializersModuleContext) -> str:
     )
 
 
+def render_path_validators(context: PathValidatorsModuleContext) -> str:
+    template = _environment().get_template("path_validators.py.j2")
+    return template.render(
+        validators=context.validators,
+        needs_re=context.needs_re,
+    )
+
+
 def render_views(context: ViewsModuleContext) -> str:
     template = _environment().get_template("views.py.j2")
     return template.render(
         views=context.views,
         serializer_imports=context.serializer_imports,
         serializers_module=context.serializers_module,
+        path_validator_imports=context.path_validator_imports,
+        path_validators_module=context.path_validators_module,
     )
 
 
@@ -78,6 +89,7 @@ def render_test_views(context: TestsModuleContext) -> str:
         view_imports=context.view_imports,
         view_method=context.view_method,
         view_bad_request=context.view_bad_request,
+        view_path_invalid=context.view_path_invalid,
     )
 
 

@@ -16,6 +16,7 @@ class FieldDefinition(BaseModel):
     required: bool = True
     nullable: bool = False
     constraints: FieldConstraints | None = None
+    error_messages: dict[str, str] | None = Field(default=None, alias="errorMessages")
 
     @field_validator("type", mode="before")
     @classmethod

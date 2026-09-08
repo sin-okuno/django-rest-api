@@ -15,6 +15,13 @@ from .{{ serializers_module }} import (
 {% endfor %}
 )
 {% endif %}
+{% if path_validator_imports %}
+from .{{ path_validators_module }} import (
+{% for name in path_validator_imports %}
+    {{ name }},
+{% endfor %}
+)
+{% endif %}
 {% for view in views %}
 
 
@@ -27,6 +34,11 @@ class {{ view.class_name }}(APIView):
         request: Request{% for param in method.path_params %},
         {{ param.snake_name }}: str{% endfor %},
     ) -> Response:
+{% for param in method.path_params %}
+{% if param.validator_function %}
+        {{ param.snake_name }} = {{ param.validator_function }}({{ param.snake_name }})
+{% endif %}
+{% endfor %}
 {% if method.request_serializer %}
 {% if method.uses_query_params %}
         serializer = {{ method.request_serializer }}(data=request.query_params)

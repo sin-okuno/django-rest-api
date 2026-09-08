@@ -5,11 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from md_drf_codegen.errors import SchemaValidationError
-from md_drf_codegen.schema import ApiEndpoint, ApiSpec, HttpMethod
+from md_drf_codegen.schema import ApiEndpoint, ApiSpec, HttpMethod, PathParameterDefinition
 from md_drf_codegen.utils.naming import (
     artifact_module_names,
     camel_to_snake,
     path_param_names,
+    path_validators_module_name,
     serializer_class_name,
     view_class_name_from_api_id,
 )
@@ -21,6 +22,7 @@ _QUERY_METHODS = {HttpMethod.GET}
 class PathParamContext:
     camel_name: str
     snake_name: str
+    validator_function: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,8 @@ class ViewsModuleContext:
     views: tuple[ViewRenderContext, ...] = field(default_factory=tuple)
     serializer_imports: tuple[str, ...] = field(default_factory=tuple)
     serializers_module: str = "serializers"
+    path_validators_module: str = "path_validators"
+    path_validator_imports: tuple[str, ...] = field(default_factory=tuple)
 
 
 def build_views_context(
@@ -54,23 +58,30 @@ def build_views_context(
 ) -> ViewsModuleContext:
     prefix = module_prefix or "generated"
     serializers_module, _views_module = artifact_module_names(prefix)
+    path_validators_module = path_validators_module_name(prefix)
 
     grouped = _group_endpoints_by_path(spec.apis)
     views: list[ViewRenderContext] = []
     serializer_names: set[str] = set()
+    validator_names: set[str] = set()
 
     for path in sorted(grouped.keys(), key=lambda p: ("{" in p, p)):
         endpoints = grouped[path]
-        view = _build_view(path, endpoints)
+        view = _build_view(path, endpoints, spec.path_parameters)
         views.append(view)
         for method in view.methods:
             if method.request_serializer:
                 serializer_names.add(method.request_serializer)
+            for param in method.path_params:
+                if param.validator_function:
+                    validator_names.add(param.validator_function)
 
     return ViewsModuleContext(
         views=tuple(views),
         serializer_imports=tuple(sorted(serializer_names)),
         serializers_module=serializers_module,
+        path_validators_module=path_validators_module,
+        path_validator_imports=tuple(sorted(validator_names)),
     )
 
 
@@ -81,9 +92,21 @@ def _group_endpoints_by_path(apis: list[ApiEndpoint]) -> dict[str, list[ApiEndpo
     return grouped
 
 
-def _build_view(path: str, endpoints: list[ApiEndpoint]) -> ViewRenderContext:
+def _build_view(
+    path: str,
+    endpoints: list[ApiEndpoint],
+    path_parameters: dict[str, PathParameterDefinition],
+) -> ViewRenderContext:
     params = tuple(
-        PathParamContext(camel_name=name, snake_name=camel_to_snake(name))
+        PathParamContext(
+            camel_name=name,
+            snake_name=camel_to_snake(name),
+            validator_function=(
+                f"validate_{camel_to_snake(name)}"
+                if name in path_parameters
+                else None
+            ),
+        )
         for name in path_param_names(path)
     )
     by_method = {endpoint.method: endpoint for endpoint in endpoints}

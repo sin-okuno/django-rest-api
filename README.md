@@ -3,7 +3,7 @@
 Django ホストプロジェクト。コード生成ツールは `tools/md-drf-codegen` に置く。
 
 アプリケーション本体のコードは変更せず、生成サンプルは
-`tools/md-drf-codegen/examples/generated/` へ出力する。
+`tools/md-drf-codegen/generated/` へ出力する。
 
 ## ツール
 
@@ -12,7 +12,5 @@ Django ホストプロジェクト。コード生成ツールは `tools/md-drf-c
 ```bash
 cd tools/md-drf-codegen
 pip install -e ".[dev]"
-md-drf-codegen extract examples/specs/product-api.md
-md-drf-codegen validate examples/generated/product-api.yaml
-md-drf-codegen generate examples/generated/product-api.yaml
+md-drf-codegen build examples/product.md --target all
 ```

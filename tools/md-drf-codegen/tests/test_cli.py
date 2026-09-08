@@ -20,6 +20,8 @@ def test_extract_command(tmp_path: Path) -> None:
     assert output.exists()
     text = output.read_text(encoding="utf-8")
     assert "getProduct" in text
+    assert "ProductListRequest" in text
+    assert "ProductDetailQuery" in text
     assert "types:" in text
 
 
@@ -85,14 +87,20 @@ def test_generate_all_target(tmp_path: Path) -> None:
     for name in (
         "product_serializers.py",
         "product_views.py",
+        "product_path_validators.py",
         "urls.py",
+        "openapi.yaml",
         "test_serializers.py",
         "test_urls.py",
         "test_views.py",
     ):
         path = out_dir / name
         assert path.exists(), name
-        ast.parse(path.read_text(encoding="utf-8"))
+        if name.endswith(".py"):
+            ast.parse(path.read_text(encoding="utf-8"))
+
+    openapi = (out_dir / "openapi.yaml").read_text(encoding="utf-8")
+    assert "openapi: 3.0.3" in openapi
 
     views = (out_dir / "product_views.py").read_text(encoding="utf-8")
     assert "NotImplementedError" in views
@@ -137,3 +145,32 @@ def test_build_command(tmp_path: Path, monkeypatch) -> None:
     assert result.exit_code == 0, result.output
     assert (tmp_path / "generated-specs" / "product-api.yaml").exists()
     assert (tmp_path / "generated" / "product" / "product_views.py").exists()
+
+
+def test_generate_openapi_target(tmp_path: Path) -> None:
+    yaml_out = tmp_path / "product-api.yaml"
+    extract = runner.invoke(app, ["extract", str(FIXTURE), "-o", str(yaml_out)])
+    assert extract.exit_code == 0, extract.output
+
+    openapi_out = tmp_path / "product-api.openapi.yaml"
+    result = runner.invoke(
+        app,
+        ["generate", str(yaml_out), "-o", str(openapi_out), "--target", "openapi"],
+    )
+    assert result.exit_code == 0, result.output
+    assert openapi_out.exists()
+    text = openapi_out.read_text(encoding="utf-8")
+    assert "openapi: 3.0.3" in text
+    assert "operationId: listProducts" in text
+
+
+def test_build_openapi_target(tmp_path: Path, monkeypatch) -> None:
+    from md_drf_codegen.commands import build as build_mod
+    from md_drf_codegen.commands import extract as extract_mod
+
+    monkeypatch.setattr(extract_mod, "DEFAULT_GENERATED_SPECS_DIR", tmp_path / "generated-specs")
+    monkeypatch.setattr(build_mod, "DEFAULT_GENERATED_SPECS_DIR", tmp_path / "generated-specs")
+
+    result = runner.invoke(app, ["build", str(FIXTURE), "--target", "openapi"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "generated-specs" / "product-api.openapi.yaml").exists()

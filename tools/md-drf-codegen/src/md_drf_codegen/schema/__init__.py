@@ -2,6 +2,7 @@
 
 from md_drf_codegen.schema.api import ApiEndpoint, HttpMethod
 from md_drf_codegen.schema.constraints import FieldConstraints
+from md_drf_codegen.schema.path_parameter import PathParameterDefinition
 from md_drf_codegen.schema.specification import (
     ApiSpec,
     MarkdownDocument,
@@ -21,5 +22,6 @@ __all__ = [
     "MarkdownSection",
     "MarkdownTable",
     "NormalizedType",
+    "PathParameterDefinition",
     "TypeDefinition",
 ]

@@ -50,6 +50,11 @@ def artifact_module_names(prefix: str) -> tuple[str, str]:
     )
 
 
+def path_validators_module_name(prefix: str) -> str:
+    """Return the generated path-validators module name for *prefix*."""
+    return f"{prefix}_path_validators"
+
+
 def serializer_class_name(type_name: str) -> str:
     """Map ``ProductDetailResponse`` to ``ProductDetailResponseSerializer``."""
     return f"{type_name}Serializer"
@@ -69,6 +74,16 @@ def view_class_name_from_api_id(api_id: str) -> str:
 def path_param_names(path: str) -> tuple[str, ...]:
     """Return camelCase path parameter names in appearance order."""
     return tuple(_PATH_PARAM.findall(path))
+
+
+def resolve_path_template(path: str, *, values: dict[str, str] | None = None) -> str:
+    """Replace ``{productId}`` placeholders with concrete values for tests."""
+    result = path
+    for camel in path_param_names(path):
+        snake = camel_to_snake(camel)
+        value = (values or {}).get(snake, "test-value")
+        result = result.replace(f"{{{camel}}}", value)
+    return result
 
 
 def django_route(path: str) -> str:

@@ -19,11 +19,22 @@ factory = APIRequestFactory()
 def {{ item.function_name }}() -> None:
     view = {{ item.view_class }}.as_view()
 {% if item.http_method == "get" %}
-    request = factory.get({{ item.path | topython }}{% if item.path_kwargs %}, kwargs={{ item.path_kwargs | topython }}{% endif %})
+    request = factory.get(
+        {{ item.request_path | topython }}{% if item.uses_query_params and item.request_data %},
+        data={{ item.request_data | topython }}{% endif %},
+    )
 {% elif item.http_method == "post" %}
-    request = factory.post({{ item.path | topython }}, data={{ item.request_data | topython }}{% if item.path_kwargs %}, kwargs={{ item.path_kwargs | topython }}{% endif %}, format="json")
+    request = factory.post(
+        {{ item.request_path | topython }},
+        data={{ item.request_data | topython }},
+        format="json",
+    )
 {% else %}
-    request = factory.put({{ item.path | topython }}, data={{ item.request_data | topython }}{% if item.path_kwargs %}, kwargs={{ item.path_kwargs | topython }}{% endif %}, format="json")
+    request = factory.put(
+        {{ item.request_path | topython }},
+        data={{ item.request_data | topython }},
+        format="json",
+    )
 {% endif %}
     with pytest.raises(NotImplementedError):
         view(request, **{{ item.path_kwargs | topython }})
@@ -34,12 +45,32 @@ def {{ item.function_name }}() -> None:
 def {{ item.function_name }}() -> None:
     view = {{ item.view_class }}.as_view()
 {% if item.http_method == "get" %}
-    request = factory.get({{ item.path | topython }}, data={{ item.invalid_payload | topython }}{% if item.path_kwargs %}, kwargs={{ item.path_kwargs | topython }}{% endif %})
+    request = factory.get(
+        {{ item.request_path | topython }},
+        data={{ item.invalid_payload | topython }},
+    )
 {% elif item.http_method == "post" %}
-    request = factory.post({{ item.path | topython }}, data={{ item.invalid_payload | topython }}{% if item.path_kwargs %}, kwargs={{ item.path_kwargs | topython }}{% endif %}, format="json")
+    request = factory.post(
+        {{ item.request_path | topython }},
+        data={{ item.invalid_payload | topython }},
+        format="json",
+    )
 {% else %}
-    request = factory.put({{ item.path | topython }}, data={{ item.invalid_payload | topython }}{% if item.path_kwargs %}, kwargs={{ item.path_kwargs | topython }}{% endif %}, format="json")
+    request = factory.put(
+        {{ item.request_path | topython }},
+        data={{ item.invalid_payload | topython }},
+        format="json",
+    )
 {% endif %}
+    response = view(request, **{{ item.path_kwargs | topython }})
+    assert response.status_code == 400
+
+
+{% endfor %}
+{% for item in view_path_invalid %}
+def {{ item.function_name }}() -> None:
+    view = {{ item.view_class }}.as_view()
+    request = factory.{{ item.http_method }}({{ item.request_path | topython }})
     response = view(request, **{{ item.path_kwargs | topython }})
     assert response.status_code == 400
 

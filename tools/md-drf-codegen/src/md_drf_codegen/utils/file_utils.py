@@ -42,7 +42,8 @@ def write_generated_files(
         path = directory / name
         if path.exists() and not force:
             raise FileExistsError(path.resolve())
-        validate_python_syntax(code, source_name=name)
+        if name.endswith(".py"):
+            validate_python_syntax(code, source_name=name)
         path.write_text(code, encoding="utf-8", newline="\n")
         written.append(path.resolve())
     return written

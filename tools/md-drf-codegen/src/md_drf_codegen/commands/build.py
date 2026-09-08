@@ -23,6 +23,17 @@ def run_build(
         yaml_output = output or (DEFAULT_GENERATED_SPECS_DIR / f"{input_abs.stem}-api.yaml")
         return [run_extract(input_abs, yaml_output)]
 
+    if target == "openapi":
+        yaml_path = DEFAULT_GENERATED_SPECS_DIR / f"{input_abs.stem}-api.yaml"
+        run_extract(input_abs, yaml_path)
+        run_validate(yaml_path)
+        openapi_out = (
+            output
+            if output is not None and output.suffix in {".yaml", ".yml", ".json"}
+            else None
+        )
+        return run_generate(yaml_path, openapi_out, target="openapi", force=force, check=check)
+
     yaml_path = DEFAULT_GENERATED_SPECS_DIR / f"{input_abs.stem}-api.yaml"
     run_extract(input_abs, yaml_path)
     run_validate(yaml_path)

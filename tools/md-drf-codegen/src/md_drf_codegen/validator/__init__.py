@@ -9,6 +9,7 @@ from md_drf_codegen.normalize import is_primitive_type, strip_array_suffix
 from md_drf_codegen.schema import ApiSpec
 from md_drf_codegen.schema.api import SUPPORTED_HTTP_METHODS
 from md_drf_codegen.schema.constraints import FieldConstraints
+from md_drf_codegen.utils.naming import path_param_names
 from md_drf_codegen.yaml_io import load_api_spec_yaml
 
 KNOWN_FIELD_TYPES: frozenset[str] = frozenset(
@@ -33,6 +34,7 @@ def validate_api_spec(spec: ApiSpec) -> list[str]:
     _assert_unique_type_names(spec)
     _assert_known_field_types(spec)
     _assert_field_constraints(spec)
+    _assert_path_parameters(spec)
     _assert_api_type_references(spec)
     _assert_property_type_references(spec)
     _assert_non_empty_types(spec, warnings)
@@ -184,6 +186,44 @@ def _validate_constraints_for_field(
             f"maxLength ({constraints.max_length}) at {context}.",
             section="types",
             fix="Ensure minLength <= maxLength.",
+        )
+
+
+def _assert_path_parameters(spec: ApiSpec) -> None:
+    used: set[str] = set()
+    for api in spec.apis:
+        used.update(path_param_names(api.path))
+
+    for name in sorted(used):
+        if name not in spec.path_parameters:
+            raise SchemaValidationError(
+                f'Path parameter "{name}" is used in apis[].path but missing from pathParameters.',
+                section="pathParameters",
+                fix='Add a row to the "## パスパラメータ" section in Markdown.',
+            )
+
+    for name, param_def in spec.path_parameters.items():
+        if param_def.param_type != "string":
+            raise SchemaValidationError(
+                f'Path parameter "{name}" must use type "string".',
+                section="pathParameters",
+                fix="URL path segments are validated as strings in generated views.",
+            )
+        if param_def.constraints is None or param_def.constraints.is_empty():
+            continue
+        _validate_constraints_for_field(
+            param_def.constraints,
+            base_type="string",
+            context=f"pathParameters.{name}",
+        )
+
+    unused = set(spec.path_parameters) - used
+    if unused:
+        names = ", ".join(sorted(unused))
+        raise SchemaValidationError(
+            f"Unused path parameter definitions: {names}.",
+            section="pathParameters",
+            fix="Remove unused rows or reference the parameter in an API path.",
         )
 
 

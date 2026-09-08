@@ -5,7 +5,15 @@ from __future__ import annotations
 import pytest
 
 from md_drf_codegen.errors import SchemaValidationError, TypeReferenceError
-from md_drf_codegen.schema import ApiEndpoint, ApiSpec, FieldDefinition, HttpMethod, TypeDefinition
+from md_drf_codegen.schema import (
+    ApiEndpoint,
+    ApiSpec,
+    FieldDefinition,
+    HttpMethod,
+    PathParameterDefinition,
+    TypeDefinition,
+)
+from md_drf_codegen.schema.constraints import FieldConstraints
 from md_drf_codegen.validator import validate_api_spec
 
 
@@ -28,6 +36,12 @@ def _minimal_spec() -> ApiSpec:
                     "productId": FieldDefinition(type="string", required=True, nullable=False),
                 }
             )
+        },
+        path_parameters={
+            "productId": PathParameterDefinition(
+                type="string",
+                constraints=FieldConstraints(max_length=50),
+            ),
         },
     )
 
@@ -61,9 +75,14 @@ def test_unknown_field_type() -> None:
         validate_api_spec(spec)
 
 
-def test_numeric_constraint_on_string_rejected() -> None:
-    from md_drf_codegen.schema.constraints import FieldConstraints
+def test_missing_path_parameter_definition() -> None:
+    spec = _minimal_spec()
+    spec.path_parameters = {}
+    with pytest.raises(SchemaValidationError):
+        validate_api_spec(spec)
 
+
+def test_numeric_constraint_on_string_rejected() -> None:
     spec = _minimal_spec()
     spec.types["ProductDetailResponse"].fields["productId"].constraints = FieldConstraints(
         min=1,

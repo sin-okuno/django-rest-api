@@ -6,6 +6,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from md_drf_codegen.generator.context_builder import build_serializers_context
+from md_drf_codegen.generator.path_validator_generator import (
+    build_invalid_path_param_value,
+    build_valid_path_param_value,
+    path_param_has_validation,
+)
 from md_drf_codegen.generator.url_generator import build_urls_context
 from md_drf_codegen.generator.view_generator import build_views_context
 from md_drf_codegen.normalize import is_primitive_type, strip_array_suffix
@@ -13,6 +18,7 @@ from md_drf_codegen.schema import ApiSpec, FieldDefinition, TypeDefinition
 from md_drf_codegen.utils.naming import (
     artifact_module_names,
     camel_to_snake,
+    resolve_path_template,
 )
 
 _SAMPLE_VALUES: dict[str, Any] = {
@@ -68,6 +74,7 @@ class ViewMethodTest:
     view_class: str
     http_method: str
     path: str
+    request_path: str
     path_kwargs: dict[str, str]
     request_data: dict[str, Any] | None
     uses_query_params: bool
@@ -80,9 +87,20 @@ class ViewBadRequestTest:
     view_class: str
     http_method: str
     path: str
+    request_path: str
     path_kwargs: dict[str, str]
     invalid_payload: dict[str, Any]
     uses_query_params: bool
+
+
+@dataclass(frozen=True)
+class ViewPathInvalidTest:
+    function_name: str
+    view_class: str
+    http_method: str
+    request_path: str
+    path_kwargs: dict[str, str]
+    invalid_param: str
 
 
 @dataclass(frozen=True)
@@ -97,6 +115,7 @@ class TestsModuleContext:
     url_resolve: tuple[UrlResolveTest, ...] = field(default_factory=tuple)
     view_method: tuple[ViewMethodTest, ...] = field(default_factory=tuple)
     view_bad_request: tuple[ViewBadRequestTest, ...] = field(default_factory=tuple)
+    view_path_invalid: tuple[ViewPathInvalidTest, ...] = field(default_factory=tuple)
     serializer_imports: tuple[str, ...] = field(default_factory=tuple)
     view_imports: tuple[str, ...] = field(default_factory=tuple)
 
@@ -167,11 +186,12 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
 
     view_method: list[ViewMethodTest] = []
     view_bad_request: list[ViewBadRequestTest] = []
+    view_path_invalid: list[ViewPathInvalidTest] = []
+    path_invalid_emitted: set[tuple[str, str]] = set()
     for view in views_ctx.views:
         for method in view.methods:
-            path_kwargs = {
-                param.snake_name: "test-value" for param in method.path_params
-            }
+            path_kwargs = _build_path_kwargs(method.path_params, spec.path_parameters)
+            request_path = resolve_path_template(view.path, values=path_kwargs)
             request_data = None
             if method.request_serializer:
                 req_type = _find_request_type(spec, method.api_id)
@@ -183,6 +203,7 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
                     view_class=view.class_name,
                     http_method=method.http_method,
                     path=view.path,
+                    request_path=request_path,
                     path_kwargs=path_kwargs,
                     request_data=request_data,
                     uses_query_params=bool(method.uses_query_params),
@@ -199,9 +220,33 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
                         view_class=view.class_name,
                         http_method=method.http_method,
                         path=view.path,
+                        request_path=request_path,
                         path_kwargs=path_kwargs,
                         invalid_payload=bad,
                         uses_query_params=bool(method.uses_query_params),
+                    )
+                )
+
+            for param in method.path_params:
+                param_def = spec.path_parameters.get(param.camel_name)
+                if param_def is None or not path_param_has_validation(param_def):
+                    continue
+                key = (view.class_name, param.snake_name)
+                if key in path_invalid_emitted:
+                    continue
+                path_invalid_emitted.add(key)
+                invalid_kwargs = dict(path_kwargs)
+                invalid_kwargs[param.snake_name] = build_invalid_path_param_value(param_def)
+                view_path_invalid.append(
+                    ViewPathInvalidTest(
+                        function_name=(
+                            f"test_{_snake(view.class_name)}_invalid_{param.snake_name}"
+                        ),
+                        view_class=view.class_name,
+                        http_method=method.http_method,
+                        request_path=resolve_path_template(view.path, values=invalid_kwargs),
+                        path_kwargs=invalid_kwargs,
+                        invalid_param=param.snake_name,
                     )
                 )
 
@@ -219,6 +264,7 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
         url_resolve=tuple(url_resolve),
         view_method=tuple(view_method),
         view_bad_request=tuple(view_bad_request),
+        view_path_invalid=tuple(view_path_invalid),
         serializer_imports=serializer_imports,
         view_imports=view_imports,
     )
@@ -226,6 +272,22 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
 
 def _snake(name: str) -> str:
     return camel_to_snake(name.replace("Serializer", ""))
+
+
+def _build_path_kwargs(
+    path_params: tuple[object, ...],
+    path_parameters: dict[str, object],
+) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for param in path_params:
+        camel_name = param.camel_name
+        snake_name = param.snake_name
+        param_def = path_parameters.get(camel_name)
+        if param_def is None:
+            values[snake_name] = "test-value"
+        else:
+            values[snake_name] = build_valid_path_param_value(param_def)
+    return values
 
 
 def _find_request_type(spec: ApiSpec, api_id: str) -> str | None:

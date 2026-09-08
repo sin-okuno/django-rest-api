@@ -27,6 +27,33 @@ TYPE_HEADERS: tuple[str, ...] = (
     "Nullable",
 )
 
+LEGACY_TYPE_HEADERS: tuple[str, ...] = (
+    "カテゴリー",
+    "型名",
+    "プロパティ",
+    "型",
+)
+
+TYPE_TABLE_HEADER_CANDIDATES: tuple[tuple[str, ...], ...] = (
+    TYPE_HEADERS,
+    LEGACY_TYPE_HEADERS,
+)
+
+
+def find_type_table(section: MarkdownSection) -> tuple[MarkdownTable, tuple[str, ...]]:
+    """Find a 型定義 table (new or legacy column layout)."""
+    for headers in TYPE_TABLE_HEADER_CANDIDATES:
+        for table in section.tables:
+            if all(header in table.headers for header in headers):
+                return table, headers
+    found = [", ".join(table.headers) for table in section.tables]
+    raise MissingColumnError(
+        section.heading,
+        list(TYPE_HEADERS),
+        found=found,
+        line=section.line,
+    )
+
 
 def parse_markdown_file(path: str | Path) -> MarkdownDocument:
     source = Path(path)
