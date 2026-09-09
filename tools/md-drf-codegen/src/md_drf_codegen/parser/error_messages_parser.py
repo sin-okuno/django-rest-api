@@ -16,6 +16,7 @@ SERIALIZER_ERROR_MESSAGE_KEYS: frozenset[str] = frozenset(
         "blank",
         "null",
         "invalid",
+        "invalid_choice",
         "max_length",
         "min_length",
         "max_value",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from md_drf_codegen.errors import MissingSectionError, SchemaValidationError
-from md_drf_codegen.normalize import normalize_cell
+from md_drf_codegen.normalize import normalize_cell, normalize_remarks
 from md_drf_codegen.parser.constraint_parser import parse_constraints_cell
 from md_drf_codegen.parser.error_messages_parser import (
     PATH_ERROR_MESSAGE_KEYS,
@@ -72,6 +72,7 @@ def parse_path_parameters(document: MarkdownDocument) -> dict[str, PathParameter
                 section="パスパラメータ",
                 line=table.line,
             ),
+            remarks=normalize_remarks(row.get("備考", "")),
         )
 
     return definitions

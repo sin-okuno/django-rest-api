@@ -11,12 +11,14 @@ from md_drf_codegen.utils.naming import path_param_names
 
 _OPENAPI_VERSION = "3.0.3"
 _QUERY_METHODS = {HttpMethod.GET}
-_PRIMITIVE_OPENAPI_TYPE = {
-    "string": "string",
-    "integer": "integer",
-    "number": "number",
-    "boolean": "boolean",
-    "object": "object",
+_PRIMITIVE_OPENAPI_SCHEMA: dict[str, dict[str, str]] = {
+    "string": {"type": "string"},
+    "integer": {"type": "integer"},
+    "number": {"type": "number"},
+    "boolean": {"type": "boolean"},
+    "date": {"type": "string", "format": "date"},
+    "datetime": {"type": "string", "format": "date-time"},
+    "object": {"type": "object"},
 }
 
 
@@ -51,6 +53,8 @@ def _build_operation(endpoint: ApiEndpoint, spec: ApiSpec) -> dict[str, Any]:
         "summary": endpoint.name,
         "responses": _build_responses(endpoint, spec),
     }
+    if endpoint.remarks:
+        operation["description"] = endpoint.remarks
 
     parameters: list[dict[str, Any]] = []
     for camel_name in path_param_names(endpoint.path):
@@ -63,6 +67,8 @@ def _build_operation(endpoint: ApiEndpoint, spec: ApiSpec) -> dict[str, Any]:
         }
         if param_def is not None:
             parameter["schema"] = _path_parameter_schema(param_def)
+            if param_def.remarks:
+                parameter["description"] = param_def.remarks
         parameters.append(parameter)
 
     if endpoint.request_type and endpoint.request_type in spec.types:
@@ -110,6 +116,7 @@ def _query_parameters(
     type_def: TypeDefinition,
     spec: ApiSpec,
 ) -> list[dict[str, Any]]:
+    del type_name
     parameters: list[dict[str, Any]] = []
     for field_name, field_def in type_def.fields.items():
         parameter: dict[str, Any] = {
@@ -118,6 +125,8 @@ def _query_parameters(
             "required": field_def.required,
             "schema": _field_schema(field_def, spec),
         }
+        if field_def.remarks:
+            parameter["description"] = field_def.remarks
         parameters.append(parameter)
     return parameters
 
@@ -165,6 +174,12 @@ def _field_schema(field_def: FieldDefinition, spec: ApiSpec) -> dict[str, Any]:
     )
     if field_def.nullable:
         schema["nullable"] = True
+    if field_def.remarks:
+        existing = schema.get("description")
+        if isinstance(existing, str) and existing:
+            schema["description"] = f"{field_def.remarks} ({existing})"
+        else:
+            schema["description"] = field_def.remarks
     return schema
 
 
@@ -178,8 +193,10 @@ def _type_expression_schema(type_expr: str, spec: ApiSpec) -> dict[str, Any]:
 
     base = strip_array_suffix(type_expr)
     if is_primitive_type(base):
-        openapi_type = _PRIMITIVE_OPENAPI_TYPE.get(base, "string")
-        return {"type": openapi_type}
+        schema = _PRIMITIVE_OPENAPI_SCHEMA.get(base)
+        if schema is not None:
+            return dict(schema)
+        return {"type": "string"}
 
     if base in spec.types:
         return {"$ref": f"#/components/schemas/{base}"}
@@ -196,6 +213,19 @@ def _constraint_properties(
         return {}
 
     props: dict[str, Any] = {}
+
+    if constraints.enum:
+        props["enum"] = [member.value for member in constraints.enum]
+        labels = [member.label for member in constraints.enum if member.label]
+        if labels:
+            labeled = ", ".join(
+                f"{member.value}={member.label}"
+                if member.label
+                else str(member.value)
+                for member in constraints.enum
+            )
+            props["description"] = labeled
+        return props
 
     if base_type in {"integer", "number", "decimal"}:
         if constraints.min is not None:

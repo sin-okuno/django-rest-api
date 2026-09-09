@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from md_drf_codegen.schema.api import ApiEndpoint
+from md_drf_codegen.schema.constant import ConstantDefinition
 from md_drf_codegen.schema.path_parameter import PathParameterDefinition
 from md_drf_codegen.schema.type_definition import TypeDefinition
 
@@ -23,6 +24,7 @@ class ApiSpec(BaseModel):
         default_factory=dict,
         alias="pathParameters",
     )
+    constants: list[ConstantDefinition] = Field(default_factory=list)
 
 
 class MarkdownTable(BaseModel):

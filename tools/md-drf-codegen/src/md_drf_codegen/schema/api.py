@@ -26,6 +26,7 @@ class ApiEndpoint(BaseModel):
     path: str = Field(min_length=1, pattern=r"^/")
     request_type: str | None = Field(default=None, alias="requestType")
     response_type: str | None = Field(default=None, alias="responseType")
+    remarks: str | None = None
 
     @field_validator("id", "name", "path", mode="before")
     @classmethod
@@ -45,3 +46,10 @@ class ApiEndpoint(BaseModel):
                 return None
             return normalized
         return value
+
+    @field_validator("remarks", mode="before")
+    @classmethod
+    def empty_remarks_to_none(cls, value: object) -> object:
+        from md_drf_codegen.normalize import normalize_remarks
+
+        return normalize_remarks(value)

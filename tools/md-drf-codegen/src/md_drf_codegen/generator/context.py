@@ -15,6 +15,8 @@ PRIMITIVE_FIELD_CLASS: dict[str, str] = {
     "number": "serializers.FloatField",
     "decimal": "serializers.DecimalField",
     "boolean": "serializers.BooleanField",
+    "date": "serializers.DateField",
+    "datetime": "serializers.DateTimeField",
 }
 
 
@@ -165,7 +167,7 @@ def _primitive_expression(
         raise SchemaValidationError(
             f'Unsupported primitive type "{base}".',
             section="types",
-            fix="Use string, integer, number, decimal, or boolean.",
+            fix="Use string, integer, number, decimal, boolean, date, or datetime.",
         )
 
     field_cls, extra = _resolve_primitive_field(base, prop=prop, allow_null=allow_null)

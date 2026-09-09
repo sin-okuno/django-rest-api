@@ -16,6 +16,18 @@ def normalize_cell(raw: str) -> str:
     return _WHITESPACE.sub(" ", _FULL_WIDTH_SPACE.sub(" ", raw)).strip()
 
 
+def normalize_remarks(raw: object) -> object:
+    """Normalize optional 備考 cells; empty / ``-`` become ``None``."""
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        return raw
+    text = normalize_cell(raw)
+    if text in {"", "-", "なし", "null"}:
+        return None
+    return text
+
+
 def normalize_nullable_type(
     raw: str,
     *,
@@ -82,6 +94,8 @@ PRIMITIVE_TYPES: frozenset[str] = frozenset(
         "integer",
         "decimal",
         "boolean",
+        "date",
+        "datetime",
         "any",
         "object",
         "null",

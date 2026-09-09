@@ -63,6 +63,43 @@ def test_empty_constraint_returns_none() -> None:
     )
 
 
+def test_parse_enum_with_labels() -> None:
+    c = parse_constraints_cell(
+        "enum:1:Low|2:Middle|3:High",
+        type_name="T",
+        field_name="status",
+        field_type="integer",
+    )
+    assert c is not None
+    assert c.enum is not None
+    assert [m.value for m in c.enum] == [1, 2, 3]
+    assert [m.label for m in c.enum] == ["Low", "Middle", "High"]
+
+
+def test_parse_enum_japanese_separator() -> None:
+    c = parse_constraints_cell(
+        "enum:1:Low、2:Middle、3:High",
+        type_name="T",
+        field_name="status",
+        field_type="integer",
+    )
+    assert c is not None
+    assert c.enum is not None
+    assert [m.value for m in c.enum] == [1, 2, 3]
+
+
+def test_parse_string_enum() -> None:
+    c = parse_constraints_cell(
+        "enum:Low|Middle|High",
+        type_name="T",
+        field_name="level",
+        field_type="string",
+    )
+    assert c is not None
+    assert c.enum is not None
+    assert [m.value for m in c.enum] == ["Low", "Middle", "High"]
+
+
 def test_unknown_token_raises() -> None:
     with pytest.raises(SchemaValidationError):
         parse_constraints_cell(

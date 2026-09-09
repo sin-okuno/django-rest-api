@@ -32,7 +32,10 @@ def render_serializers(context: SerializersModuleContext) -> str:
     template = _environment().get_template("serializers.py.j2")
     return template.render(
         serializers=context.serializers,
+        enum_definitions=context.enum_definitions,
+        enum_imports=context.enum_imports,
         needs_regex_validator=context.needs_regex_validator,
+        needs_enum=context.needs_enum,
     )
 
 

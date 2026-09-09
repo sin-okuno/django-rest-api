@@ -18,6 +18,8 @@ KNOWN_FIELD_TYPES: frozenset[str] = frozenset(
         "integer",
         "number",
         "boolean",
+        "date",
+        "datetime",
         "object",
     }
 )
@@ -136,6 +138,7 @@ def _validate_constraints_for_field(
     base_type: str,
     context: str,
 ) -> None:
+    has_enum = bool(constraints.enum) or bool(constraints.enum_ref)
     numeric_keys = constraints.min is not None or constraints.max is not None
     string_keys = (
         constraints.min_length is not None
@@ -144,20 +147,49 @@ def _validate_constraints_for_field(
         or constraints.pattern is not None
     )
 
+    if has_enum:
+        if base_type not in {"string", "integer", "number", "decimal"}:
+            raise SchemaValidationError(
+                f"Enum constraints are not supported on type '{base_type}' at {context}.",
+                section="types",
+                fix="Apply enum only to string, integer, or number fields.",
+            )
+        if numeric_keys or string_keys:
+            raise SchemaValidationError(
+                f"Enum cannot be combined with other value constraints at {context}.",
+                section="types",
+                fix="Use only enum:... / ref:... in the 制約 cell for enumerated fields.",
+            )
+        if constraints.enum:
+            values = [member.value for member in constraints.enum]
+            if len(values) != len(set(values)):
+                raise SchemaValidationError(
+                    f"Enum values must be unique at {context}.",
+                    section="types",
+                    fix="Remove duplicate enum values.",
+                )
+        return
+
     if base_type in {"integer", "number", "decimal"}:
         if string_keys:
             raise SchemaValidationError(
                 f"String constraints are not allowed on numeric field {context}.",
                 section="types",
-                fix="Use min/max or a range like 1-50 for numeric fields.",
+                fix="Use min/max, a range like 1-50, or enum:1:Low|2:Middle.",
             )
     elif base_type == "string":
         if numeric_keys:
             raise SchemaValidationError(
                 f"Numeric range constraints are not allowed on string field {context}.",
                 section="types",
-                fix="Use 最大N文字, minLength, maxLength, or 半角英数字 for strings.",
+                fix="Use 最大N文字, minLength, maxLength, 半角英数字, or enum:...",
             )
+    elif base_type in {"date", "datetime", "boolean", "object"}:
+        raise SchemaValidationError(
+            f"Constraints are not supported on type '{base_type}' at {context}.",
+            section="types",
+            fix="Leave the 制約 cell as '-' for date/datetime/boolean/object fields.",
+        )
     else:
         raise SchemaValidationError(
             f"Constraints are not supported on type '{base_type}' at {context}.",

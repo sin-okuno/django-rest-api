@@ -78,8 +78,35 @@ def test_integer_range_constraint() -> None:
     )
     files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
     code = next(iter(files.values()))
+    assert "IntegerField" in code
     assert "min_value=1" in code
     assert "max_value=50" in code
+    ast.parse(code)
+
+
+def test_date_and_datetime_fields() -> None:
+    spec = _spec_with_types(
+        {
+            "Sample": TypeDefinition(
+                fields={
+                    "updatedDate": FieldDefinition(
+                        type="date", required=True, nullable=False
+                    ),
+                    "updatedAt": FieldDefinition(
+                        type="datetime", required=False, nullable=True
+                    ),
+                }
+            )
+        }
+    )
+    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
+    code = next(iter(files.values()))
+    assert (
+        "updatedDate = serializers.DateField(required=True, allow_null=False)" in code
+    )
+    assert (
+        "updatedAt = serializers.DateTimeField(required=False, allow_null=True)" in code
+    )
     ast.parse(code)
 
 

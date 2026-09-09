@@ -6,6 +6,7 @@ from pathlib import Path
 
 from md_drf_codegen.parser import (
     parse_api_endpoints,
+    parse_constants,
     parse_markdown_file,
     parse_path_parameters,
     parse_type_definitions,
@@ -28,4 +29,5 @@ def extract_from_document(
         apis=parse_api_endpoints(document),
         types=parse_type_definitions(document),
         path_parameters=parse_path_parameters(document),
+        constants=parse_constants(document),
     )

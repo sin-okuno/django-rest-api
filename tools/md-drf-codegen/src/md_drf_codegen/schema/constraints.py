@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class StringFormat(StrEnum):
@@ -33,6 +34,15 @@ FORMAT_ALIASES: dict[str, StringFormat] = {
 }
 
 
+class EnumMember(BaseModel):
+    """One allowed value in an enum constraint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: str | int | float
+    label: str | None = None
+
+
 class FieldConstraints(BaseModel):
     """Validation constraints for a single field."""
 
@@ -44,6 +54,31 @@ class FieldConstraints(BaseModel):
     max_length: int | None = Field(default=None, alias="maxLength", ge=1)
     format: StringFormat | None = None
     pattern: str | None = Field(default=None, min_length=1)
+    enum: list[EnumMember] | None = None
+    enum_ref: str | None = Field(default=None, alias="enumRef")
+
+    @field_validator("enum", mode="before")
+    @classmethod
+    def normalize_enum(cls, value: Any) -> Any:
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            return value
+        members: list[Any] = []
+        for item in value:
+            if isinstance(item, (str, int, float)):
+                members.append({"value": item})
+            else:
+                members.append(item)
+        return members
+
+    @field_validator("enum_ref", mode="before")
+    @classmethod
+    def strip_enum_ref(cls, value: object) -> object:
+        if isinstance(value, str):
+            text = value.strip()
+            return text or None
+        return value
 
     def is_empty(self) -> bool:
         return (
@@ -53,6 +88,8 @@ class FieldConstraints(BaseModel):
             and self.max_length is None
             and self.format is None
             and self.pattern is None
+            and not self.enum
+            and self.enum_ref is None
         )
 
     def resolved_pattern(self) -> tuple[str, str] | None:
@@ -62,3 +99,8 @@ class FieldConstraints(BaseModel):
         if self.format is not None:
             return FORMAT_PATTERNS[self.format]
         return None
+
+    def enum_values(self) -> list[str | int | float]:
+        if not self.enum:
+            return []
+        return [member.value for member in self.enum]

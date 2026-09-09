@@ -88,12 +88,18 @@ pip install -e ".[dev]"
 
 ## Markdown 仕様
 
-最低限以下のセクションが必要です。
+### セクション一覧
 
-- `## API一覧` — API ID, API名, メソッド, パス, リクエスト型, レスポンス型
-- `## 型定義` — 型名, プロパティ, 型, 必須, Nullable, **制約**（任意）
+| セクション | 必須 | 内容 |
+| --- | --- | --- |
+| `## API一覧` | 必須 | API ID, API名, メソッド, パス, リクエスト型, レスポンス型, **備考**（任意） |
+| `## 型定義` | 必須 | 型名, プロパティ, 型, 必須, Nullable, **制約** / **エラーメッセージ** / **備考**（いずれも任意） |
+| `## パスパラメータ` | パスに `{name}` があるとき必須 | パラメータ名, 型, 制約, **エラーメッセージ** / **備考**（任意） |
+| `## 定数定義一覧` | Enum を既存クラスから使うとき | ファイルパス, クラス名, **備考**（任意） |
 
-`-` は `null` / 制約なしとして扱います。
+`-` は `null` / 制約なし / 備考なしとして扱います。`備考` は ApiSpec YAML に保存され、OpenAPI の `description` にも反映されます。
+
+サンプル: [examples/product.md](examples/product.md)
 
 ### パスパラメータとクエリパラメータ
 
@@ -106,12 +112,12 @@ pip install -e ".[dev]"
 ```markdown
 ## パスパラメータ
 
-| パラメータ名 | 型 | 制約 |
-| --- | --- | --- |
-| productId | string | 半角英数字, 最大20文字 |
+| パラメータ名 | 型 | 制約 | エラーメッセージ | 備考 |
+| --- | --- | --- | --- | --- |
+| productId | string | 半角英数字, 最大20文字 | - | URL 上の製品 ID |
 ```
 
-API パスで使う `{productId}` は、上表に必ず定義してください（`制約` 列は型定義と同じ凡例）。
+API パスで使う `{productId}` は、上表に必ず定義してください（`制約` 列は型定義と同じ凡例。`備考` は任意）。
 
 | 設計書のパス | 生成 URL | 生成 View（例） |
 |-------------|----------|----------------|
@@ -157,15 +163,15 @@ def get(
 #### 設計書の記載例
 
 ```markdown
-| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
-| listProducts | 製品一覧取得 | GET | /api/products | ProductListRequest | ProductListResponse |
-| getProduct | 製品詳細取得 | GET | /api/products/{productId} | ProductDetailQuery | ProductDetailResponse |
-| updateProduct | 製品更新 | PUT | /api/products/{productId} | ProductUpdateRequest | ProductDetailResponse |
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 | 備考 |
+| listProducts | 製品一覧取得 | GET | /api/products | ProductListRequest | ProductListResponse | キーワード検索 |
+| getProduct | 製品詳細取得 | GET | /api/products/{productId} | ProductDetailQuery | ProductDetailResponse | - |
+| updateProduct | 製品更新 | PUT | /api/products/{productId} | ProductUpdateRequest | ProductDetailResponse | 楽観ロック |
 
-| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 |
-| ProductListRequest | keyword | string | false | false | 最大50文字 |
-| ProductListRequest | page | integer | false | false | 1-100 |
-| ProductDetailQuery | includeDeleted | boolean | false | false | - |
+| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 | 備考 |
+| ProductListRequest | keyword | string | false | false | 最大50文字 | 部分一致 |
+| ProductListRequest | page | integer | false | false | 1-100 | - |
+| ProductDetailQuery | includeDeleted | boolean | false | false | - | - |
 ```
 
 #### パラメータの対応まとめ
@@ -181,6 +187,25 @@ def get(
 `制約` 列は任意です。制約を付けない場合は `-` / `なし` / `null` / `制約なし` のいずれかを記載します。
 
 複数の制約は `,` / `;` / `、` で区切って指定できます。
+
+#### 対応型（プリミティブ）
+
+| Markdown 型 | 生成フィールド | OpenAPI | 入力例 |
+|-------------|----------------|---------|--------|
+| `string` | `CharField` | `string` | `"ABC"` |
+| `integer` | `IntegerField` | `integer` | `1` |
+| `number` | `FloatField` | `number` | `1.5` |
+| `boolean` | `BooleanField` | `boolean` | `true` |
+| `date` | `DateField` | `string` + `format: date` | `"2024-01-15"` |
+| `datetime` | `DateTimeField` | `string` + `format: date-time` | `"2024-01-15T12:00:00Z"` |
+| `object` | `JSONField` | `object` | `{...}` |
+
+`date` / `datetime` には制約列を付けません（`-`）。形式は ISO 8601（日付は `YYYY-MM-DD`）です。
+
+```markdown
+| ProductDetailResponse | updatedDate | date | true | false | - |
+| ProductDetailResponse | updatedAt | datetime | false | true | - |
+```
 
 #### 制約なし
 
@@ -207,6 +232,148 @@ def get(
 | `1-999999` | 大きな範囲指定 | `min_value=1`, `max_value=999999` |
 | `0.1-99.9` | 小数を含む範囲（`number` 型） | `min_value=0.1`, `max_value=99.9` |
 
+#### Enum（列挙値）の使い方
+
+許可値を持つフィールドは、制約列に `enum:`（および任意で `ref:`）を書きます。  
+生成結果は常に DRF の `ChoiceField` で、choices は**標準ライブラリ `Enum` 互換**の次の形です。
+
+```python
+choices=[(m.value, m.name) for m in Status]
+```
+
+メンバー区切りは `|` / `｜` / `、` / `,` です。ラベルは任意（`値:ラベル`）。  
+**Markdown 表では `|` が列区切りと衝突するため、`、` 区切りを推奨**します。
+
+| 記載値 | 意味 |
+|--------|------|
+| `enum:1:Low、2:Middle、3:High` | 整数値 + ラベル（OpenAPI / ローカル生成用） |
+| `enum:1\|2\|3` | 整数値のみ |
+| `enum:Low\|Middle\|High` | 文字列 enum（フィールド型は `string`） |
+| `ref:Status` | 既存クラス名を明示参照（`定数定義一覧` 必須） |
+
+Enum は他の値制約（`1-50` / `半角英数字` など）と併用できません。適用可能な型は `integer` / `number` / `string` です。
+
+##### 1. 既存プロジェクトの Enum を使う（推奨）
+
+既存が次のような標準 `Enum` でもそのまま使えます。
+
+```python
+# common/util/Consts.py
+from enum import Enum
+
+class Status(Enum):
+    HIGH = 1
+    MIDDLE = 2
+    LOW = 3
+
+class Priority(Enum):
+    IM = 1
+    SH = 2
+    NO = 3
+```
+
+Markdown では `## 定数定義一覧` にクラスを登録し、型定義の制約に `enum:` を書きます。
+
+```markdown
+## 定数定義一覧
+
+| ファイルパス | クラス名 | 備考 |
+| --- | --- | --- |
+| common/util/Consts.py | Status | 1:Low / 2:Middle / 3:High |
+| common/util/Consts.py | Priority | 1:IM / 2:SH / 3:NO |
+
+## 型定義
+
+| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 | エラーメッセージ | 備考 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| ProductUpdateRequest | status | integer | true | false | enum:1:Low、2:Middle、3:High | invalid_choice:ステータスの値が正しくありません | Status 参照 |
+| ProductUpdateRequest | priority | integer | true | false | enum:1:IM、2:SH、3:NO | - | Priority 参照 |
+```
+
+生成例:
+
+```python
+from common.util.Consts import Priority, Status
+
+status = serializers.ChoiceField(
+    choices=[(m.value, m.name) for m in Status],
+    required=True,
+    allow_null=False,
+    error_messages={'invalid_choice': 'ステータスの値が正しくありません'},
+)
+priority = serializers.ChoiceField(
+    choices=[(m.value, m.name) for m in Priority],
+    required=True,
+    allow_null=False,
+)
+```
+
+##### 2. フィールドと Enum クラスの紐づけ
+
+codegen は既存 Python ファイルを読みません。次のルールでクラス名を決めます。
+
+| 優先度 | ルール | 例 |
+|--------|--------|-----|
+| 1 | 制約に `ref:ClassName` がある | `ref:Priority` → `Priority` |
+| 2 | プロパティ名を PascalCase 化した名前 | `status` → `Status`、`priority` → `Priority` |
+| 3 | その名前が `定数定義一覧` にある | → **import**（ローカル Enum は作らない） |
+| 4 | 一覧に無い | → 同モジュール内に `class Status(Enum): ...` を生成 |
+
+プロパティ名とクラス名が一致しない場合は必ず `ref:` を付けます。
+
+```markdown
+| ProductUpdateRequest | level | integer | true | false | enum:1:IM、2:SH、3:NO, ref:Priority | - | - |
+```
+
+##### 3. ローカルに Enum を生成する場合
+
+`定数定義一覧` が無い（または一致するクラスが無い）ときは、Serializer ファイル先頭に標準 `Enum` を生成します。
+
+```python
+from enum import Enum
+
+class Status(Enum):
+    LOW = 1
+    MIDDLE = 2
+    HIGH = 3
+```
+
+メンバー名はラベル（あれば）または値から `SCREAMING_SNAKE` 化します（例: ラベル `Low` → `LOW`）。
+
+##### 4. OpenAPI との関係
+
+- `enum:` の値一覧 → OpenAPI `enum` と説明（`1=Low` など）
+- `備考` → property / operation の `description`
+- 既存 Enum の実体と `enum:` の値が食い違っていても生成時は検知しません（実行時の ChoiceField 検証で判明）
+
+##### 5. YAML 表現例
+
+```yaml
+constants:
+  - path: common/util/Consts.py
+    className: Status
+    remarks: 製品ステータス
+  - path: common/util/Consts.py
+    className: Priority
+    remarks: 優先度（1:IM / 2:SH / 3:NO）
+# ...
+status:
+  type: integer
+  required: true
+  nullable: false
+  remarks: Status 参照
+  constraints:
+    enum:
+      - value: 1
+        label: Low
+      - value: 2
+        label: Middle
+      - value: 3
+        label: High
+  errorMessages:
+    invalid_choice: ステータスの値が正しくありません
+```
+
 ### エラーメッセージ列（任意）
 
 `エラーメッセージ` 列は**任意**です。列自体がなくても、`-` / 空欄でも問題ありません。
@@ -222,14 +389,16 @@ def get(
 | `blank` | 空文字エラー |
 | `null` | null エラー |
 | `invalid` | 型不正 |
+| `invalid_choice` | Enum（ChoiceField）の不正値 |
 | `max_length` / `min_length` | 文字列長 |
 | `max_value` / `min_value` | 数値範囲 |
 | `pattern` | 半角英数字など形式制約（`RegexValidator` の message） |
 
 ```markdown
-| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 | エラーメッセージ |
-| ProductUpdateRequest | productName | string | true | false | 最大50文字 | required:製品名は必須です; max_length:製品名は50文字以内で入力してください |
-| ProductUpdateRequest | price | number | true | false | 1-999999 | - |
+| 型名 | プロパティ | 型 | 必須 | Nullable | 制約 | エラーメッセージ | 備考 |
+| ProductUpdateRequest | productName | string | true | false | 最大50文字 | required:製品名は必須です; max_length:製品名は50文字以内で入力してください | - |
+| ProductUpdateRequest | price | number | true | false | 1-999999 | - | - |
+| ProductUpdateRequest | status | integer | true | false | enum:1:Low、2:Middle、3:High | invalid_choice:ステータスの値が正しくありません | Status 参照 |
 ```
 
 #### パスパラメータ
@@ -240,8 +409,8 @@ def get(
 | `pattern` | 形式制約 |
 
 ```markdown
-| パラメータ名 | 型 | 制約 | エラーメッセージ |
-| productId | string | 半角英数字, 最大20文字 | pattern:製品IDの形式が正しくありません |
+| パラメータ名 | 型 | 制約 | エラーメッセージ | 備考 |
+| productId | string | 半角英数字, 最大20文字 | pattern:製品IDの形式が正しくありません | URL 上の製品 ID |
 ```
 
 **凡例（型定義テーブル）**
@@ -361,8 +530,20 @@ apis:
     name: 製品詳細取得
     method: GET
     path: /api/products/{productId}
-    requestType: null
+    requestType: ProductDetailQuery
     responseType: ProductDetailResponse
+    remarks: 単一取得
+pathParameters:
+  productId:
+    type: string
+    remarks: URL 上の製品 ID
+    constraints:
+      format: halfwidth-alphanumeric
+      maxLength: 20
+constants:
+  - path: common/util/Consts.py
+    className: Status
+    remarks: 製品ステータス
 types:
   ProductDetailResponse:
     fields:
@@ -373,6 +554,24 @@ types:
         constraints:
           format: halfwidth-alphanumeric
           maxLength: 20
+      status:
+        type: integer
+        required: true
+        nullable: false
+        remarks: Status Enum 参照
+        constraints:
+          enum:
+            - value: 1
+              label: Low
+            - value: 2
+              label: Middle
+            - value: 3
+              label: High
+      updatedDate:
+        type: date
+        required: true
+        nullable: false
+        remarks: 最終更新日
       revision:
         type: integer
         required: true
@@ -416,11 +615,17 @@ md-drf-codegen build examples/product.md --target openapi
 | ApiSpec | OpenAPI |
 |---------|---------|
 | `apis[].path` + `method` | `paths` |
+| `apis[].name` | `summary` |
+| `apis[].remarks` | operation `description` |
 | GET の `requestType` | `parameters`（`in: query`） |
 | PUT/POST の `requestType` | `requestBody` |
 | `responseType` | `responses.200.content` |
 | `pathParameters` | `parameters`（`in: path`） |
+| `pathParameters.*.remarks` / フィールド `remarks` | `description` |
 | `types` | `components/schemas` |
+| `constraints.enum` | schema `enum` |
+| `date` / `datetime` | `string` + `format: date` / `date-time` |
+| `constants` | （OpenAPI には出さない。Serializer import 用） |
 
 ### Phase 1: YAML のみ
 
@@ -476,6 +681,7 @@ md-drf-codegen generate product-api.yaml \
 ## 設計判断
 
 - `number` 型は初期実装では `FloatField` を使用します（YAML に Decimal 精度情報がないため）。
+- Enum の ChoiceField は標準 `Enum` 向け（`[(m.value, m.name) for m in X]`）。Django `IntegerChoices` も動作しますが、既存定数は標準 `Enum` を想定しています。
 - View は業務ロジックを持たず `NotImplementedError` を raise します。
 - 同一パスに複数 HTTP メソッドがある場合、1 つの `APIView` にまとめます（Django URL ルーティングの制約）。
 
@@ -485,15 +691,20 @@ md-drf-codegen generate product-api.yaml \
 
 業務ロジックは Service / Selector 層に実装し、View は薄い委譲層として保つことを推奨します。
 
+既存 Enum を参照する場合、実行時に `common.util.Consts` などが import 可能である必要があります（PYTHONPATH / プロジェクト構成）。
+
 ## 制約事項
 
 - 対応 HTTP メソッド: GET, POST, PUT（PATCH / DELETE は将来拡張）
+- 対応プリミティブ型: `string` / `integer` / `number` / `boolean` / `date` / `datetime` / `object`
 - 未知の型は Validation Error
+- `date` / `datetime` / `boolean` / `object` には制約列を付けない（`-`）
 
 ## 今後の拡張候補
 
 - PATCH / DELETE 対応
 - `DecimalField` の精度指定
+- 日付範囲制約
 
 ## 開発
 
@@ -501,3 +712,5 @@ md-drf-codegen generate product-api.yaml \
 pytest
 ruff check .
 ```
+
+詳細手順は [docs/手順書.md](docs/手順書.md) を参照してください。

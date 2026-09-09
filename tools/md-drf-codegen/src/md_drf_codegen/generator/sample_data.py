@@ -130,6 +130,10 @@ def _primitive_sample(
         return "10." + ("5" * places)
     if base == "boolean":
         return True
+    if base == "date":
+        return "2024-01-15"
+    if base == "datetime":
+        return "2024-01-15T12:00:00Z"
     if base in {"any", "object"}:
         return {f"sample_{field_name}": True}
     return f"sample-{field_name}"

@@ -17,6 +17,7 @@ class FieldDefinition(BaseModel):
     nullable: bool = False
     constraints: FieldConstraints | None = None
     error_messages: dict[str, str] | None = Field(default=None, alias="errorMessages")
+    remarks: str | None = None
 
     @field_validator("type", mode="before")
     @classmethod
@@ -24,6 +25,13 @@ class FieldDefinition(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return value
+
+    @field_validator("remarks", mode="before")
+    @classmethod
+    def empty_remarks_to_none(cls, value: object) -> object:
+        from md_drf_codegen.normalize import normalize_remarks
+
+        return normalize_remarks(value)
 
 
 class TypeDefinition(BaseModel):

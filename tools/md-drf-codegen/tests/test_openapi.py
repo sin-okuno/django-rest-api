@@ -134,3 +134,32 @@ def test_dump_openapi_yaml_from_product_markdown() -> None:
     doc = yaml.safe_load(body)
     assert doc["openapi"] == "3.0.3"
     assert "/api/products/{productId}" in doc["paths"]
+    updated = doc["components"]["schemas"]["ProductDetailResponse"]["properties"][
+        "updatedDate"
+    ]
+    assert updated["type"] == "string"
+    assert updated["format"] == "date"
+    assert updated["description"] == "最終更新日"
+
+
+def test_date_and_datetime_openapi_formats() -> None:
+    spec = ApiSpec(
+        version=1,
+        apis=[],
+        types={
+            "Sample": TypeDefinition(
+                fields={
+                    "updatedDate": FieldDefinition(
+                        type="date", required=True, nullable=False
+                    ),
+                    "updatedAt": FieldDefinition(
+                        type="datetime", required=True, nullable=False
+                    ),
+                }
+            ),
+        },
+    )
+    doc = build_openapi_document(spec, title="Sample")
+    props = doc["components"]["schemas"]["Sample"]["properties"]
+    assert props["updatedDate"] == {"type": "string", "format": "date"}
+    assert props["updatedAt"] == {"type": "string", "format": "date-time"}

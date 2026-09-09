@@ -7,6 +7,7 @@ from md_drf_codegen.normalize import (
     is_primitive_type,
     normalize_cell,
     normalize_nullable_type,
+    normalize_remarks,
     strip_array_suffix,
 )
 from md_drf_codegen.parser.constraint_parser import parse_constraints_cell
@@ -164,6 +165,7 @@ def parse_type_definitions(document: MarkdownDocument) -> dict[str, TypeDefiniti
             )
             if not legacy
             else None,
+            remarks=normalize_remarks(row.get("備考", "")),
         )
 
         type_fields = buckets.setdefault(type_name, {})

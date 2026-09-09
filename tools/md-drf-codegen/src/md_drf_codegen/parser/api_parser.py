@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from md_drf_codegen.errors import SchemaValidationError
-from md_drf_codegen.normalize import normalize_cell
+from md_drf_codegen.normalize import normalize_cell, normalize_remarks
 from md_drf_codegen.parser.markdown_parser import API_HEADERS, find_section, find_table
 from md_drf_codegen.schema import ApiEndpoint, MarkdownDocument
 from md_drf_codegen.schema.api import SUPPORTED_HTTP_METHODS
@@ -52,6 +52,7 @@ def parse_api_endpoints(document: MarkdownDocument) -> list[ApiEndpoint]:
                     "path": normalize_cell(row.get("パス", "")),
                     "requestType": normalize_cell(row.get("リクエスト型", "")),
                     "responseType": normalize_cell(row.get("レスポンス型", "")),
+                    "remarks": normalize_remarks(row.get("備考", "")),
                 }
             )
         )

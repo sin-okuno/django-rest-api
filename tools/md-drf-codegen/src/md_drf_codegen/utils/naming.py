@@ -9,6 +9,7 @@ _CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 _PATH_PARAM = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _MODULE_SAFE = re.compile(r"[^0-9A-Za-z_]+")
+_ENUM_MEMBER_SAFE = re.compile(r"[^0-9A-Za-z]+")
 
 
 def camel_to_snake(name: str) -> str:
@@ -21,6 +22,28 @@ def camel_to_snake(name: str) -> str:
 
 def snake_to_pascal(name: str) -> str:
     return "".join(part.capitalize() for part in name.split("_") if part)
+
+
+def enum_class_name_from_field(field_name: str) -> str:
+    """Map ``status`` / ``productStatus`` to ``Status`` / ``ProductStatus``."""
+    return snake_to_pascal(camel_to_snake(field_name))
+
+
+def enum_member_name(value: str | int | float, label: str | None) -> str:
+    """Derive a SCREAMING_SNAKE member name from label or value."""
+    source = (label or str(value)).strip()
+    cleaned = _ENUM_MEMBER_SAFE.sub("_", source).strip("_").upper()
+    if cleaned and cleaned[0].isdigit():
+        cleaned = f"VALUE_{cleaned}"
+    if not cleaned:
+        cleaned = f"VALUE_{value}".upper().replace(".", "_").replace("-", "_")
+        cleaned = _ENUM_MEMBER_SAFE.sub("_", cleaned).strip("_")
+    if not cleaned or not cleaned.replace("_", "").isalnum():
+        cleaned = f"VALUE_{value}".upper().replace(".", "_").replace("-", "NEG_")
+        cleaned = _ENUM_MEMBER_SAFE.sub("_", cleaned).strip("_") or "VALUE"
+    if cleaned[0].isdigit():
+        cleaned = f"VALUE_{cleaned}"
+    return cleaned
 
 
 def sanitize_module_name(raw: str, *, fallback: str = "generated") -> str:

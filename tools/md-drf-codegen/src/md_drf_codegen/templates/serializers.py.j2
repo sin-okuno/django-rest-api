@@ -5,9 +5,23 @@
 from __future__ import annotations
 
 from rest_framework import serializers
+{% if needs_enum %}
+from enum import Enum
+{% endif %}
 {% if needs_regex_validator %}
 from django.core.validators import RegexValidator
 {% endif %}
+{% for imp in enum_imports %}
+from {{ imp.module }} import {{ imp.class_name }}
+{% endfor %}
+{% for enum in enum_definitions %}
+
+
+class {{ enum.class_name }}({{ enum.base_class }}):
+{% for member in enum.members %}
+    {{ member.name }} = {{ member.value_repr }}
+{% endfor %}
+{% endfor %}
 {% for serializer in serializers %}
 
 

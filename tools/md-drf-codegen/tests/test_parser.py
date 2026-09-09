@@ -18,21 +18,24 @@ def test_parse_api_list() -> None:
 
 ## API一覧
 
-| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
-| --- | --- | --- | --- | --- | --- |
-| getProduct | 詳細 | GET | /api/products/{productId} | - | ProductDetailResponse |
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 | 備考 |
+| --- | --- | --- | --- | --- | --- | --- |
+| getProduct | 詳細 | GET | /api/products/{productId} | - | ProductDetailResponse | 単一取得 |
 
 ## 型定義
 
-| 型名 | プロパティ | 型 | 必須 | Nullable |
-| --- | --- | --- | --- | --- |
-| ProductDetailResponse | productId | string | true | false |
+| 型名 | プロパティ | 型 | 必須 | Nullable | 備考 |
+| --- | --- | --- | --- | --- | --- |
+| ProductDetailResponse | productId | string | true | false | 製品 ID |
 """
     doc = parse_markdown_content(content, source_path="sample.md")
     apis = parse_api_endpoints(doc)
     assert len(apis) == 1
     assert apis[0].id == "getProduct"
     assert apis[0].request_type is None
+    assert apis[0].remarks == "単一取得"
+    types = parse_type_definitions(doc)
+    assert types["ProductDetailResponse"].fields["productId"].remarks == "製品 ID"
 
 
 def test_missing_api_section_raises() -> None:
@@ -140,9 +143,9 @@ def test_parse_path_parameters() -> None:
 
 ## パスパラメータ
 
-| パラメータ名 | 型 | 制約 |
-| --- | --- | --- |
-| productId | string | 半角英数字, 最大20文字 |
+| パラメータ名 | 型 | 制約 | 備考 |
+| --- | --- | --- | --- |
+| productId | string | 半角英数字, 最大20文字 | URL 上の製品 ID |
 
 ## 型定義
 
@@ -156,3 +159,4 @@ def test_parse_path_parameters() -> None:
     assert path_params["productId"].param_type == "string"
     assert path_params["productId"].constraints is not None
     assert path_params["productId"].constraints.max_length == 20
+    assert path_params["productId"].remarks == "URL 上の製品 ID"

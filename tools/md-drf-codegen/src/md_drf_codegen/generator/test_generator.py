@@ -26,6 +26,8 @@ _SAMPLE_VALUES: dict[str, Any] = {
     "integer": 1,
     "number": 1.0,
     "boolean": True,
+    "date": "2024-01-15",
+    "datetime": "2024-01-15T12:00:00Z",
     "object": {},
 }
 
@@ -312,6 +314,11 @@ def _build_valid_payload(
 
 def _sample_value(field_def: FieldDefinition, known: dict[str, TypeDefinition]) -> Any:
     base = strip_array_suffix(field_def.type)
+    if field_def.constraints and field_def.constraints.enum:
+        first = field_def.constraints.enum[0].value
+        if field_def.type.endswith("[]"):
+            return [first]
+        return first
     if field_def.type.endswith("[]"):
         return [_sample_scalar(base, known)]
     return _sample_scalar(base, known)
@@ -326,6 +333,8 @@ def _sample_scalar(base: str, known: dict[str, TypeDefinition]) -> Any:
 
 
 def _invalid_value(field_def: FieldDefinition) -> Any:
+    if field_def.constraints and field_def.constraints.enum:
+        return "__invalid_enum__"
     base = strip_array_suffix(field_def.type)
     if base == "string":
         return 123
@@ -333,6 +342,8 @@ def _invalid_value(field_def: FieldDefinition) -> Any:
         return "not-a-number"
     if base == "boolean":
         return "not-a-bool"
+    if base in {"date", "datetime"}:
+        return "not-a-date"
     return None
 
 
