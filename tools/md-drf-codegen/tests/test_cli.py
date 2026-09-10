@@ -86,6 +86,7 @@ def test_generate_all_target(tmp_path: Path) -> None:
 
     for name in (
         "product_serializers.py",
+        "product_handlers.py",
         "product_views.py",
         "product_path_validators.py",
         "urls.py",
@@ -103,8 +104,12 @@ def test_generate_all_target(tmp_path: Path) -> None:
     assert "openapi: 3.0.3" in openapi
 
     views = (out_dir / "product_views.py").read_text(encoding="utf-8")
-    assert "NotImplementedError" in views
+    assert "handle_update_product" in views
+    assert "ProductDetailResponseSerializer" in views
+    assert "response_serializer" in views
     assert "def put(" in views
+    handlers = (out_dir / "product_handlers.py").read_text(encoding="utf-8")
+    assert "def handle_update_product(" in handlers
 
 
 def test_generate_refuses_overwrite_without_force(tmp_path: Path) -> None:

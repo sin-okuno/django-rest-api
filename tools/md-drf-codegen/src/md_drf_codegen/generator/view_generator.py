@@ -9,6 +9,8 @@ from md_drf_codegen.schema import ApiEndpoint, ApiSpec, HttpMethod, PathParamete
 from md_drf_codegen.utils.naming import (
     artifact_module_names,
     camel_to_snake,
+    handler_function_name,
+    handlers_module_name,
     path_param_names,
     path_validators_module_name,
     serializer_class_name,
@@ -29,7 +31,9 @@ class PathParamContext:
 class MethodRenderContext:
     http_method: str
     api_id: str
+    handler_function: str
     request_serializer: str | None
+    response_serializer: str | None
     uses_query_params: bool
     path_params: tuple[PathParamContext, ...]
 
@@ -49,6 +53,8 @@ class ViewsModuleContext:
     serializers_module: str = "serializers"
     path_validators_module: str = "path_validators"
     path_validator_imports: tuple[str, ...] = field(default_factory=tuple)
+    handlers_module: str = "handlers"
+    handler_imports: tuple[str, ...] = field(default_factory=tuple)
 
 
 def build_views_context(
@@ -59,19 +65,24 @@ def build_views_context(
     prefix = module_prefix or "generated"
     serializers_module, _views_module = artifact_module_names(prefix)
     path_validators_module = path_validators_module_name(prefix)
+    handlers_module = handlers_module_name(prefix)
 
     grouped = _group_endpoints_by_path(spec.apis)
     views: list[ViewRenderContext] = []
     serializer_names: set[str] = set()
     validator_names: set[str] = set()
+    handler_names: set[str] = set()
 
     for path in sorted(grouped.keys(), key=lambda p: ("{" in p, p)):
         endpoints = grouped[path]
         view = _build_view(path, endpoints, spec.path_parameters)
         views.append(view)
         for method in view.methods:
+            handler_names.add(method.handler_function)
             if method.request_serializer:
                 serializer_names.add(method.request_serializer)
+            if method.response_serializer:
+                serializer_names.add(method.response_serializer)
             for param in method.path_params:
                 if param.validator_function:
                     validator_names.add(param.validator_function)
@@ -82,6 +93,8 @@ def build_views_context(
         serializers_module=serializers_module,
         path_validators_module=path_validators_module,
         path_validator_imports=tuple(sorted(validator_names)),
+        handlers_module=handlers_module,
+        handler_imports=tuple(sorted(handler_names)),
     )
 
 
@@ -128,12 +141,19 @@ def _build_view(
         request_serializer = (
             serializer_class_name(endpoint.request_type) if endpoint.request_type else None
         )
+        response_serializer = (
+            serializer_class_name(endpoint.response_type) if endpoint.response_type else None
+        )
         methods.append(
             MethodRenderContext(
                 http_method=endpoint.method.value.lower(),
                 api_id=endpoint.id,
+                handler_function=handler_function_name(endpoint.id),
                 request_serializer=request_serializer,
-                uses_query_params=endpoint.method in _QUERY_METHODS and request_serializer,
+                response_serializer=response_serializer,
+                uses_query_params=bool(
+                    endpoint.method in _QUERY_METHODS and request_serializer
+                ),
                 path_params=params,
             )
         )

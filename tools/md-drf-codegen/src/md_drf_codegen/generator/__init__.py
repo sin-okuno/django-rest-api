@@ -6,9 +6,11 @@ from enum import StrEnum
 from pathlib import Path
 
 from md_drf_codegen.generator.context_builder import build_serializers_context
+from md_drf_codegen.generator.handler_generator import build_handlers_context
 from md_drf_codegen.generator.path_validator_generator import build_path_validators_context
 from md_drf_codegen.generator.renderer import (
     render_conftest,
+    render_handlers,
     render_package_init,
     render_path_validators,
     render_serializers,
@@ -26,6 +28,7 @@ from md_drf_codegen.schema import ApiSpec
 from md_drf_codegen.utils.file_utils import write_generated_files
 from md_drf_codegen.utils.naming import (
     artifact_module_names,
+    handlers_module_name,
     path_validators_module_name,
     sanitize_module_name,
 )
@@ -68,11 +71,13 @@ def generate_code_files(
 
     if target == GenerateTarget.ALL:
         views_ctx = build_views_context(spec, module_prefix=prefix)
+        handlers_ctx = build_handlers_context(spec)
         urls_ctx = build_urls_context(spec, module_prefix=prefix)
         tests_ctx = build_tests_context(spec, package_name=prefix)
         path_ctx = build_path_validators_context(spec, module_prefix=prefix)
 
         files[f"{views_module}.py"] = render_views(views_ctx)
+        files[f"{handlers_module_name(prefix)}.py"] = render_handlers(handlers_ctx)
         if path_ctx.validators:
             files[f"{path_validators_module_name(prefix)}.py"] = render_path_validators(path_ctx)
         files["urls.py"] = render_urls(urls_ctx)

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import pytest
 from rest_framework.test import APIRequestFactory
 
 from {{ package_name }}.{{ views_module }} import (
@@ -36,8 +35,9 @@ def {{ item.function_name }}() -> None:
         format="json",
     )
 {% endif %}
-    with pytest.raises(NotImplementedError):
-        view(request, **{{ item.path_kwargs | topython }})
+    response = view(request, **{{ item.path_kwargs | topython }})
+    assert response.status_code == 200
+    assert isinstance(response.data, dict)
 
 
 {% endfor %}

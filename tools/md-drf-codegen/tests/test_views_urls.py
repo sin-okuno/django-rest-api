@@ -62,15 +62,24 @@ def _product_spec() -> ApiSpec:
 def test_views_and_urls_generate() -> None:
     files = generate_code_files(_product_spec(), target=GenerateTarget.ALL, package_name="product")
     views = files["product_views.py"]
+    handlers = files["product_handlers.py"]
     urls = files["urls.py"]
     path_validators = files["product_path_validators.py"]
-    assert "NotImplementedError" in views
+    assert "handle_get_product" in views
+    assert "handle_update_product" in views
+    assert "ProductDetailResponseSerializer" in views
+    assert "response_serializer" in views
+    assert "return Response(response_serializer.data)" in views
+    assert "NotImplementedError" not in views
+    assert "def handle_get_product(" in handlers
+    assert "def handle_update_product(" in handlers
     assert "product_id" in views
     assert "validate_product_id" in views
     assert "ValidationError" in path_validators
     assert "get-product" in urls or "list-products" not in urls
     assert "<str:product_id>" in urls
     ast.parse(views)
+    ast.parse(handlers)
     ast.parse(urls)
 
 

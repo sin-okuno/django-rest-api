@@ -73,6 +73,16 @@ def artifact_module_names(prefix: str) -> tuple[str, str]:
     )
 
 
+def handlers_module_name(prefix: str) -> str:
+    """Return the generated handlers module name for *prefix*."""
+    return f"{prefix}_handlers"
+
+
+def handler_function_name(api_id: str) -> str:
+    """Map ``updateProduct`` to ``handle_update_product``."""
+    return f"handle_{camel_to_snake(api_id)}"
+
+
 def path_validators_module_name(prefix: str) -> str:
     """Return the generated path-validators module name for *prefix*."""
     return f"{prefix}_path_validators"

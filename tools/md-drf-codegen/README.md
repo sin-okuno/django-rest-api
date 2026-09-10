@@ -11,7 +11,8 @@ Markdown 仕様書から YAML を生成し、その YAML から Django REST Fram
 - Markdown → YAML（ApiSpec 中間形式）
 - YAML → OpenAPI 3.0（Swagger UI / Editor 用）
 - YAML → Serializer
-- YAML → View 骨格（`NotImplementedError`）
+- YAML → View 骨格（Handler 関数へ委譲・デモレスポンス）
+- YAML → Handler 関数（デモデータ。業務実装の差し替え先）
 - YAML → URL
 - YAML → 基本テスト（Serializer / URL / View）
 
@@ -658,6 +659,7 @@ md-drf-codegen build examples/product.md --target all
 `--target all` 時:
 
 - `{prefix}_serializers.py`
+- `{prefix}_handlers.py`（デモレスポンス関数）
 - `{prefix}_path_validators.py`（パスパラメータ定義がある場合）
 - `{prefix}_views.py`
 - `urls.py`
@@ -682,14 +684,15 @@ md-drf-codegen generate product-api.yaml \
 
 - `number` 型は初期実装では `FloatField` を使用します（YAML に Decimal 精度情報がないため）。
 - Enum の ChoiceField は標準 `Enum` 向け（`[(m.value, m.name) for m in X]`）。Django `IntegerChoices` も動作しますが、既存定数は標準 `Enum` を想定しています。
-- View は業務ロジックを持たず `NotImplementedError` を raise します。
+- View は薄い委譲層とし、業務処理は `{prefix}_handlers.py` の関数に切り出します（初期実装はデモデータを返します）。
+- Handler の戻り値はレスポンス型の Serializer で検証してから `Response` に載せます。
 - 同一パスに複数 HTTP メソッドがある場合、1 つの `APIView` にまとめます（Django URL ルーティングの制約）。
 
 ## 注意事項
 
-**生成された View に業務ロジックを直接大量に追記すると、再生成が難しくなります。**
+**生成された Handler に業務ロジックを直接大量に追記すると、再生成が難しくなります。**
 
-業務ロジックは Service / Selector 層に実装し、View は薄い委譲層として保つことを推奨します。
+業務ロジックは Service / Selector 層に実装し、Handler は薄い委譲層として保つことを推奨します。
 
 既存 Enum を参照する場合、実行時に `common.util.Consts` などが import 可能である必要があります（PYTHONPATH / プロジェクト構成）。
 

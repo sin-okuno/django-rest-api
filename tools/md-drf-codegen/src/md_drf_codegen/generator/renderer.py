@@ -8,6 +8,7 @@ from importlib import resources
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
 from md_drf_codegen.generator.context_builder import SerializersModuleContext
+from md_drf_codegen.generator.handler_generator import HandlersModuleContext
 from md_drf_codegen.generator.path_validator_generator import PathValidatorsModuleContext
 from md_drf_codegen.generator.test_generator import TestsModuleContext
 from md_drf_codegen.generator.url_generator import UrlsModuleContext
@@ -55,7 +56,14 @@ def render_views(context: ViewsModuleContext) -> str:
         serializers_module=context.serializers_module,
         path_validator_imports=context.path_validator_imports,
         path_validators_module=context.path_validators_module,
+        handler_imports=context.handler_imports,
+        handlers_module=context.handlers_module,
     )
+
+
+def render_handlers(context: HandlersModuleContext) -> str:
+    template = _environment().get_template("handlers.py.j2")
+    return template.render(handlers=context.handlers)
 
 
 def render_urls(context: UrlsModuleContext) -> str:

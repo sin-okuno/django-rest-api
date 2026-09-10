@@ -80,7 +80,6 @@ class ViewMethodTest:
     path_kwargs: dict[str, str]
     request_data: dict[str, Any] | None
     uses_query_params: bool
-    expects_not_implemented: bool
 
 
 @dataclass(frozen=True)
@@ -201,7 +200,7 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
                     request_data = _build_valid_payload(req_type, spec.types[req_type], spec.types)
             view_method.append(
                 ViewMethodTest(
-                    function_name=f"test_{_snake(view.class_name)}_{method.http_method}_not_implemented",
+                    function_name=f"test_{_snake(view.class_name)}_{method.http_method}_demo_response",
                     view_class=view.class_name,
                     http_method=method.http_method,
                     path=view.path,
@@ -209,7 +208,6 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
                     path_kwargs=path_kwargs,
                     request_data=request_data,
                     uses_query_params=bool(method.uses_query_params),
-                    expects_not_implemented=True,
                 )
             )
             if method.request_serializer and request_data:
