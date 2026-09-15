@@ -15,7 +15,7 @@ from md_drf_codegen.schema import (
     PathParameterDefinition,
     TypeDefinition,
 )
-from md_drf_codegen.schema.constraints import FieldConstraints
+from md_drf_codegen.schema.constraints import EnumMember, FieldConstraints
 
 
 def _product_spec() -> ApiSpec:
@@ -123,7 +123,51 @@ def test_build_openapi_document_structure() -> None:
     assert "ProductListResponse" in doc["components"]["schemas"]
 
 
-def test_dump_openapi_yaml_from_product_markdown() -> None:
+def test_openapi_query_array_is_comma_separated() -> None:
+    spec = ApiSpec(
+        version=1,
+        apis=[
+            ApiEndpoint(
+                id="listProducts",
+                name="一覧",
+                method=HttpMethod.GET,
+                path="/api/products",
+                requestType="ProductListRequest",
+                responseType="ProductListResponse",
+            ),
+        ],
+        types={
+            "ProductListRequest": TypeDefinition(
+                fields={
+                    "statuses": FieldDefinition(
+                        type="integer[]",
+                        required=False,
+                        nullable=False,
+                        constraints=FieldConstraints(
+                            enum=[
+                                EnumMember(value=1, label="Low"),
+                                EnumMember(value=3, label="High"),
+                            ]
+                        ),
+                    ),
+                }
+            ),
+            "ProductListResponse": TypeDefinition(
+                fields={
+                    "items": FieldDefinition(type="string[]", required=True, nullable=False),
+                }
+            ),
+        },
+    )
+    doc = build_openapi_document(spec, title="Sample")
+    params = doc["paths"]["/api/products"]["get"]["parameters"]
+    statuses = next(p for p in params if p["name"] == "statuses")
+    assert statuses["in"] == "query"
+    assert statuses["style"] == "form"
+    assert statuses["explode"] is False
+    assert statuses["schema"]["type"] == "array"
+    assert statuses["schema"]["items"]["enum"] == [1, 3]
+
     from pathlib import Path
 
     product_md = Path(__file__).resolve().parents[1] / "examples" / "product.md"

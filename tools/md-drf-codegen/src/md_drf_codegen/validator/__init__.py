@@ -35,6 +35,7 @@ def validate_api_spec(spec: ApiSpec) -> list[str]:
     _assert_supported_methods(spec)
     _assert_unique_type_names(spec)
     _assert_known_field_types(spec)
+    _assert_allow_blank(spec)
     _assert_field_constraints(spec)
     _assert_path_parameters(spec)
     _assert_api_type_references(spec)
@@ -117,6 +118,21 @@ def _assert_known_field_types(spec: ApiSpec) -> None:
                     f'Unknown field type "{field_def.type}" on {type_name}.{field_name}.',
                     section="types",
                     fix="Define the custom type or use a supported primitive.",
+                )
+
+
+def _assert_allow_blank(spec: ApiSpec) -> None:
+    for type_name, type_def in spec.types.items():
+        for field_name, field_def in type_def.fields.items():
+            if not field_def.allow_blank:
+                continue
+            base = strip_array_suffix(field_def.type)
+            if base != "string":
+                raise SchemaValidationError(
+                    f'allowBlank is only supported on string fields '
+                    f'(got "{field_def.type}" at types.{type_name}.{field_name}).',
+                    section="types",
+                    fix='Use Nullable "blank" / "true,blank" only on string (or string[]) fields.',
                 )
 
 

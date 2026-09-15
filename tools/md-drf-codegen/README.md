@@ -171,8 +171,12 @@ def get(
 
 | 型名 | プロパティ | 型 | 必須 | Nullable | 制約 | 備考 |
 | ProductListRequest | keyword | string | false | false | 最大50文字 | 部分一致 |
+| ProductListRequest | cweId | string | false | false | pattern:^CWE-[0-9]+$, 最大20文字 | 例: CWE-12345 |
 | ProductListRequest | page | integer | false | false | 1-100 | - |
+| ProductListRequest | statuses | integer[] | false | false | enum:1:Low、2:Middle、3:High, ref:Status | クエリはカンマ区切り |
+| ProductListRequest | tags | string[] | false | false | - | クエリはカンマ区切り |
 | ProductDetailQuery | includeDeleted | boolean | false | false | - | - |
+| ProductUpdateRequest | tags | string[] | false | false | - | ボディは JSON 配列 |
 ```
 
 #### パラメータの対応まとめ
@@ -182,6 +186,83 @@ def get(
 | パスパラメータ | パス列の `{productId}` + `## パスパラメータ` | GET / POST / PUT | View 引数 + `{prefix}_path_validators.py` |
 | クエリパラメータ | リクエスト型のフィールド | GET のみ | `request.query_params` + Serializer |
 | リクエストボディ | リクエスト型のフィールド | POST / PUT | `request.data` + Serializer |
+
+<a id="arrays"></a>
+
+#### 配列（クエリとリクエストボディ）
+
+Markdown 上の型はどちらも同じ `string[]` / `integer[]`（Enum 付きも可）です。  
+**記載の仕方は共通**で、**呼び出し側の渡し方だけが GET（クエリ）と POST/PUT（ボディ）で異なります**。
+
+生成フィールドは常に `CommaSeparatedListField`（`ListField` の拡張）です。
+
+| 用途 | API メソッド | リクエストの受け取り | クライアントの渡し方 | 例 |
+|------|-------------|---------------------|---------------------|----|
+| クエリ配列 | GET | `request.query_params` | **カンマ区切り 1 パラメータ** | `?tags=a,b,c` / `?statuses=1,3` |
+| ボディ配列 | POST / PUT | `request.data` | **JSON 配列**（推奨） | `{"tags": ["a", "b", "c"]}` |
+
+```markdown
+# 同じ型表記（string[] / integer[]）
+| ProductListRequest | tags | string[] | false | false | - | - | GET クエリ用 |
+| ProductListRequest | statuses | integer[] | false | false | enum:1:Low、2:Middle、3:High, ref:Status | - | GET クエリ + Enum |
+| ProductUpdateRequest | tags | string[] | false | false | - | - | PUT ボディ用 |
+```
+
+**クエリ（GET）の例**
+
+```http
+GET /api/products?tags=alpha,beta&statuses=1,3
+```
+
+検証後: `tags == ["alpha", "beta"]`, `statuses == [1, 3]`
+
+OpenAPI ではクエリ配列を `style: form` / `explode: false`（カンマ区切り）で出力します。  
+`?tags=a&tags=b` のような繰り返しパラメータ（explode）には対応しません。
+
+**リクエストボディ（POST / PUT）の例**
+
+```json
+{
+  "productName": "Sample",
+  "price": 100,
+  "revision": 1,
+  "status": 1,
+  "tags": ["alpha", "beta"]
+}
+```
+
+`CommaSeparatedListField` は互換のため、ボディでも `"tags": "alpha,beta"` のようなカンマ区切り文字列を受け付けますが、**JSON 配列を推奨**します。
+
+| Markdown 型 | クエリ例 | ボディ JSON 例 | 検証後の値 |
+|-------------|---------|----------------|------------|
+| `string[]` | `?tags=a,b,c` | `{"tags": ["a", "b", "c"]}` | `["a", "b", "c"]` |
+| `integer[]` | `?ids=1,2,3` | `{"ids": [1, 2, 3]}` | `[1, 2, 3]` |
+| `integer[]` + `enum:…` | `?statuses=1,3` | `{"statuses": [1, 3]}` | `[1, 3]`（ChoiceField で検証） |
+
+オブジェクト配列（例: `ProductSummary[]`）はレスポンス用のネスト Serializer 配列です。クエリのカンマ区切りにはしません。
+
+> **よくある質問:** クエリとボディで配列の書き方を分ける必要はありますか？  
+> → Markdown / YAML の型は同じ `string[]` 等で構いません。GET ならクエリ（カンマ区切り）、POST/PUT なら JSON 配列、と **HTTP 上の表現だけ**が違います。
+
+### Nullable 列（null / 空文字）
+
+`string` 型では Nullable 列で **null** と **空文字 (`""`)** を分けて指定できます（制約列ではありません）。
+
+| 記載値 | `allow_null` | `allow_blank` | 意味 |
+|--------|--------------|---------------|------|
+| `false` | False | False | null も空文字も不可 |
+| `true` | True | False | null 可、空文字は不可 |
+| `blank` / `空文字` | False | True | 空文字可、null は不可 |
+| `true,blank` / `true/空文字` | True | True | null も空文字も可 |
+
+```markdown
+| ProductDetailResponse | description | string | false | true,blank | 最大200文字 | - | null または空文字可 |
+```
+
+生成例: `CharField(..., allow_null=True, allow_blank=True)`
+
+> DRF では `allow_null=True` だけでは `""` は弾かれます。レスポンスや入力で空文字を許す項目には `blank` を付けてください。  
+> `blank` は `string` / `string[]` の要素にのみ有効です。
 
 ### 制約列の凡例
 
@@ -207,15 +288,6 @@ def get(
 | ProductDetailResponse | updatedDate | date | true | false | - |
 | ProductDetailResponse | updatedAt | datetime | false | true | - |
 ```
-
-#### 制約なし
-
-| 記載値 | 意味 |
-|--------|------|
-| `-` | 制約なし |
-| `なし` | 制約なし |
-| `null` | 制約なし |
-| `制約なし` | 制約なし |
 
 #### 数値型（`integer` / `number`）向け
 
@@ -456,6 +528,7 @@ status:
 | `halfwidth-alphanumeric` | 半角英数字（YAML 形式名） | 同上 |
 | `pattern:^[A-Z]+$` | 任意の正規表現 | `RegexValidator(regex='^[A-Z]+$')` |
 | `pattern:^[0-9]{3}-[0-9]{4}$` | 電話番号形式など | カスタム `RegexValidator` |
+| `pattern:^CWE-[0-9]+$` | CWE-ID（例: `CWE-12345`） | カスタム `RegexValidator` |
 
 **凡例（型定義テーブル）**
 
@@ -464,6 +537,7 @@ status:
 | --- | --- | --- | --- | --- | --- |
 | ProductSummary | productId | string | true | false | 半角英数字, 最大20文字 |
 | ProductSummary | productCode | string | true | false | pattern:^[A-Z]{2}[0-9]{4}$ |
+| ProductListRequest | cweId | string | false | false | pattern:^CWE-[0-9]+$, 最大20文字 |
 ```
 
 #### 複合指定の凡例

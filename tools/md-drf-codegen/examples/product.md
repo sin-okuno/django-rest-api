@@ -25,14 +25,17 @@
 | 型名 | プロパティ | 型 | 必須 | Nullable | 制約 | エラーメッセージ | 備考 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ProductListRequest | keyword | string | false | false | 最大50文字 | - | 部分一致検索 |
+| ProductListRequest | cweId | string | false | false | pattern:^CWE-[0-9]+$, 最大20文字 | pattern:CWE-IDの形式が正しくありません | 例: CWE-12345 |
 | ProductListRequest | page | integer | false | false | 1-100 | - | - |
+| ProductListRequest | statuses | integer[] | false | false | enum:1:Low、2:Middle、3:High, ref:Status | - | カンマ区切り（例: 1,3）。Status Enum |
+| ProductListRequest | tags | string[] | false | false | - | - | カンマ区切りタグ |
 | ProductListResponse | items | ProductSummary[] | true | false | - | - | - |
 | ProductSummary | productId | string | true | false | 半角英数字, 最大20文字 | - | - |
 | ProductSummary | productName | string | true | false | 最大50文字 | - | - |
 | ProductDetailQuery | includeDeleted | boolean | false | false | - | - | 論理削除済みも含める場合 true |
 | ProductDetailResponse | productId | string | true | false | 半角英数字, 最大20文字 | - | - |
 | ProductDetailResponse | productName | string | true | false | 最大50文字 | - | - |
-| ProductDetailResponse | description | string | false | true | 最大200文字 | - | - |
+| ProductDetailResponse | description | string | false | true,blank | 最大200文字 | - | null または空文字可 |
 | ProductDetailResponse | price | number | true | false | 1-999999 | - | - |
 | ProductDetailResponse | revision | integer | true | false | 1-50 | - | 楽観ロック用 |
 | ProductDetailResponse | status | integer | true | false | enum:1:Low、2:Middle、3:High | - | Status Enum 参照 |
@@ -41,3 +44,4 @@
 | ProductUpdateRequest | price | number | true | false | 1-999999 | - | - |
 | ProductUpdateRequest | revision | integer | true | false | 1-50 | - | 楽観ロック用 |
 | ProductUpdateRequest | status | integer | true | false | enum:1:Low、2:Middle、3:High | invalid_choice:ステータスの値が正しくありません | Status Enum 参照 |
+| ProductUpdateRequest | tags | string[] | false | false | - | - | JSON 配列（例: ["alpha","beta"]） |

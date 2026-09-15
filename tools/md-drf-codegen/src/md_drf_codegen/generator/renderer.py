@@ -37,6 +37,7 @@ def render_serializers(context: SerializersModuleContext) -> str:
         enum_imports=context.enum_imports,
         needs_regex_validator=context.needs_regex_validator,
         needs_enum=context.needs_enum,
+        needs_comma_separated_list=context.needs_comma_separated_list,
     )
 
 
@@ -84,6 +85,7 @@ def render_test_serializers(context: TestsModuleContext) -> str:
         serializer_missing=context.serializer_missing,
         serializer_invalid_type=context.serializer_invalid_type,
         serializer_nullable=context.serializer_nullable,
+        serializer_blank=context.serializer_blank,
     )
 
 

@@ -69,6 +69,32 @@ def test_serializer_emits_custom_error_messages() -> None:
     assert "50文字以内" in content
 
 
+def test_serializer_pattern_uses_custom_message() -> None:
+    spec = ApiSpec(
+        version=1,
+        apis=[],
+        types={
+            "SampleRequest": TypeDefinition(
+                fields={
+                    "cweId": FieldDefinition(
+                        type="string",
+                        required=False,
+                        nullable=False,
+                        constraints=FieldConstraints(pattern=r"^CWE-[0-9]+$"),
+                        error_messages={"pattern": "CWE-IDの形式が正しくありません"},
+                    ),
+                }
+            ),
+        },
+    )
+    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
+    content = files["sample_serializers.py"]
+    assert "RegexValidator" in content
+    assert r"^CWE-[0-9]+$" in content
+    assert "CWE-IDの形式が正しくありません" in content
+    assert "error_messages=" not in content
+
+
 def test_serializer_without_custom_messages_omits_error_messages_kwarg() -> None:
     spec = ApiSpec(
         version=1,

@@ -40,6 +40,29 @@ def test_nullable_field() -> None:
     code = next(iter(files.values()))
     assert "allow_null=True" in code
     assert "required=False" in code
+    assert "allow_blank=False" in code
+
+
+def test_allow_blank_field() -> None:
+    spec = _spec_with_types(
+        {
+            "Sample": TypeDefinition(
+                fields={
+                    "description": FieldDefinition(
+                        type="string",
+                        required=False,
+                        nullable=True,
+                        allowBlank=True,
+                    )
+                }
+            )
+        }
+    )
+    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
+    code = next(iter(files.values()))
+    assert "allow_null=True" in code
+    assert "allow_blank=True" in code
+    assert "required=False" in code
 
 
 def test_nested_serializer() -> None:

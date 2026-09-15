@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from md_drf_codegen.errors import SchemaValidationError
 from md_drf_codegen.normalize import (
     is_primitive_type,
@@ -23,6 +25,13 @@ from md_drf_codegen.parser.markdown_parser import (
 from md_drf_codegen.schema import FieldDefinition, MarkdownDocument, TypeDefinition
 from md_drf_codegen.schema.constraints import FieldConstraints
 
+_NULLABLE_SPLIT = re.compile(r"[,;/、|+]+")
+_NULL_TOKENS = frozenset({"true", "1", "yes", "null", "nullable"})
+_BLANK_TOKENS = frozenset(
+    {"blank", "empty", "空文字", "空文字可", "allowblank", "allow_blank"}
+)
+_FALSE_TOKENS = frozenset({"false", "0", "no", "-", "なし"})
+
 
 def _to_bool(raw: str) -> bool:
     cell = normalize_cell(raw).lower()
@@ -35,6 +44,57 @@ def _to_bool(raw: str) -> bool:
         section="型定義",
         fix='Use "true" or "false".',
     )
+
+
+def _parse_nullable_cell(
+    raw: str,
+    *,
+    fallback_nullable: bool = False,
+    line: int | None = None,
+) -> tuple[bool, bool]:
+    """Parse Nullable cell into ``(allow_null, allow_blank)``.
+
+    Examples:
+    - ``false`` → (False, False)
+    - ``true`` → (True, False)
+    - ``blank`` / ``空文字`` → (False, True)
+    - ``true,blank`` / ``true/空文字`` → (True, True)
+    """
+    cell = normalize_cell(raw)
+    if not cell:
+        return fallback_nullable, False
+
+    lowered = cell.casefold()
+    if lowered in _FALSE_TOKENS:
+        return False, False
+    if lowered in _NULL_TOKENS:
+        return True, False
+    if lowered in _BLANK_TOKENS or cell in {"空文字", "空文字可"}:
+        return False, True
+
+    tokens = [normalize_cell(part) for part in _NULLABLE_SPLIT.split(cell) if normalize_cell(part)]
+    if not tokens:
+        return fallback_nullable, False
+
+    allow_null = False
+    allow_blank = False
+    for token in tokens:
+        key = token.casefold()
+        if key in _FALSE_TOKENS:
+            continue
+        if key in _NULL_TOKENS:
+            allow_null = True
+            continue
+        if key in _BLANK_TOKENS or token in {"空文字", "空文字可"}:
+            allow_blank = True
+            continue
+        raise SchemaValidationError(
+            f'Invalid Nullable value "{raw}".',
+            section="型定義",
+            line=line,
+            fix='Use false / true / blank / 空文字, or combine e.g. true,blank.',
+        )
+    return allow_null, allow_blank
 
 
 def _parse_optional_int(raw: str) -> int | None:
@@ -124,6 +184,7 @@ def parse_type_definitions(document: MarkdownDocument) -> dict[str, TypeDefiniti
             optional = _to_bool(row.get("任意", "false"))
             required = not optional
             nullable = normalized.nullable
+            allow_blank = False
             constraints = parse_constraints_cell(
                 row.get("制約", ""),
                 type_name=type_name,
@@ -141,8 +202,11 @@ def parse_type_definitions(document: MarkdownDocument) -> dict[str, TypeDefiniti
                     line=table.line,
                 )
         else:
-            nullable_cell = normalize_cell(row.get("Nullable", ""))
-            nullable = _to_bool(nullable_cell) if nullable_cell else normalized.nullable
+            nullable, allow_blank = _parse_nullable_cell(
+                row.get("Nullable", ""),
+                fallback_nullable=normalized.nullable,
+                line=table.line,
+            )
             required = _to_bool(row.get("必須", "true"))
             constraints = parse_constraints_cell(
                 row.get("制約", ""),
@@ -156,6 +220,7 @@ def parse_type_definitions(document: MarkdownDocument) -> dict[str, TypeDefiniti
             type=normalized.type,
             required=required,
             nullable=nullable,
+            allowBlank=allow_blank,
             constraints=constraints,
             error_messages=parse_error_messages_cell(
                 row.get("エラーメッセージ", ""),

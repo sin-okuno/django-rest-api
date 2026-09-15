@@ -119,12 +119,17 @@ def _query_parameters(
     del type_name
     parameters: list[dict[str, Any]] = []
     for field_name, field_def in type_def.fields.items():
+        schema = _field_schema(field_def, spec)
         parameter: dict[str, Any] = {
             "name": field_name,
             "in": "query",
             "required": field_def.required,
-            "schema": _field_schema(field_def, spec),
+            "schema": schema,
         }
+        if schema.get("type") == "array":
+            # Comma-separated query values: ?status=1,2,3
+            parameter["style"] = "form"
+            parameter["explode"] = False
         if field_def.remarks:
             parameter["description"] = field_def.remarks
         parameters.append(parameter)
@@ -166,12 +171,16 @@ def _object_schema(type_def: TypeDefinition, spec: ApiSpec) -> dict[str, Any]:
 
 def _field_schema(field_def: FieldDefinition, spec: ApiSpec) -> dict[str, Any]:
     schema = _type_expression_schema(field_def.type, spec)
-    schema.update(
-        _constraint_properties(
-            field_def.constraints,
-            base_type=strip_array_suffix(field_def.type),
-        )
+    constraint_props = _constraint_properties(
+        field_def.constraints,
+        base_type=strip_array_suffix(field_def.type),
     )
+    if is_array_type(field_def.type) and constraint_props:
+        items = dict(schema.get("items") or {})
+        items.update(constraint_props)
+        schema["items"] = items
+    else:
+        schema.update(constraint_props)
     if field_def.nullable:
         schema["nullable"] = True
     if field_def.remarks:

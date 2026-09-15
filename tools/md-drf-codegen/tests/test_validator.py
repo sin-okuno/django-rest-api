@@ -75,6 +75,18 @@ def test_unknown_field_type() -> None:
         validate_api_spec(spec)
 
 
+def test_allow_blank_on_non_string_rejected() -> None:
+    spec = _minimal_spec()
+    spec.types["ProductDetailResponse"].fields["count"] = FieldDefinition(
+        type="integer",
+        required=False,
+        nullable=True,
+        allowBlank=True,
+    )
+    with pytest.raises(SchemaValidationError, match="allowBlank"):
+        validate_api_spec(spec)
+
+
 def test_missing_path_parameter_definition() -> None:
     spec = _minimal_spec()
     spec.path_parameters = {}

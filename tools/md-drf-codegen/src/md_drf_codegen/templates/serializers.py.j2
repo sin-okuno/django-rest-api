@@ -14,6 +14,24 @@ from django.core.validators import RegexValidator
 {% for imp in enum_imports %}
 from {{ imp.module }} import {{ imp.class_name }}
 {% endfor %}
+{% if needs_comma_separated_list %}
+
+
+class CommaSeparatedListField(serializers.ListField):
+    """Accept a JSON list or a comma-separated query string (e.g. ``1,2,3``)."""
+
+    def to_internal_value(self, data):  # type: ignore[no-untyped-def]
+        if isinstance(data, str):
+            data = [part.strip() for part in data.split(",") if part.strip() != ""]
+        elif (
+            isinstance(data, (list, tuple))
+            and len(data) == 1
+            and isinstance(data[0], str)
+            and "," in data[0]
+        ):
+            data = [part.strip() for part in data[0].split(",") if part.strip() != ""]
+        return super().to_internal_value(data)
+{% endif %}
 {% for enum in enum_definitions %}
 
 

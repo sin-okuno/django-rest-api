@@ -48,3 +48,13 @@ def {{ item.function_name }}() -> None:
 
 
 {% endfor %}
+{% for item in serializer_blank %}
+def {{ item.function_name }}() -> None:
+    serializer = {{ item.serializer_class }}(
+        data={{ item.payload | topython }}
+    )
+    assert serializer.is_valid(), serializer.errors
+    assert serializer.validated_data[{{ item.blank_field | topython }}] == ""
+
+
+{% endfor %}

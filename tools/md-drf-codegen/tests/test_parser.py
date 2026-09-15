@@ -124,12 +124,22 @@ def test_parse_type_definitions() -> None:
 | --- | --- | --- | --- | --- |
 | ProductDetailResponse | productId | string | true | false |
 | ProductDetailResponse | description | string | false | true |
+| ProductDetailResponse | note | string | false | true,blank |
+| ProductDetailResponse | title | string | false | blank |
 """
     doc = parse_markdown_content(content, source_path="x.md")
     types = parse_type_definitions(doc)
     assert "ProductDetailResponse" in types
-    assert types["ProductDetailResponse"].fields["description"].nullable is True
-    assert types["ProductDetailResponse"].fields["description"].required is False
+    description = types["ProductDetailResponse"].fields["description"]
+    assert description.nullable is True
+    assert description.required is False
+    assert description.allow_blank is False
+    note = types["ProductDetailResponse"].fields["note"]
+    assert note.nullable is True
+    assert note.allow_blank is True
+    title = types["ProductDetailResponse"].fields["title"]
+    assert title.nullable is False
+    assert title.allow_blank is True
 
 
 def test_parse_path_parameters() -> None:

@@ -64,6 +64,14 @@ class SerializerNullableTest:
 
 
 @dataclass(frozen=True)
+class SerializerBlankTest:
+    serializer_class: str
+    function_name: str
+    blank_field: str
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class UrlResolveTest:
     function_name: str
     resolve_path: str
@@ -113,6 +121,7 @@ class TestsModuleContext:
     serializer_missing: tuple[SerializerMissingTest, ...] = field(default_factory=tuple)
     serializer_invalid_type: tuple[SerializerInvalidTypeTest, ...] = field(default_factory=tuple)
     serializer_nullable: tuple[SerializerNullableTest, ...] = field(default_factory=tuple)
+    serializer_blank: tuple[SerializerBlankTest, ...] = field(default_factory=tuple)
     url_resolve: tuple[UrlResolveTest, ...] = field(default_factory=tuple)
     view_method: tuple[ViewMethodTest, ...] = field(default_factory=tuple)
     view_bad_request: tuple[ViewBadRequestTest, ...] = field(default_factory=tuple)
@@ -131,6 +140,7 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
     serializer_missing: list[SerializerMissingTest] = []
     serializer_invalid_type: list[SerializerInvalidTypeTest] = []
     serializer_nullable: list[SerializerNullableTest] = []
+    serializer_blank: list[SerializerBlankTest] = []
 
     for ser in ser_ctx.serializers:
         type_def = spec.types[ser.type_name]
@@ -173,6 +183,17 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
                         function_name=f"test_{_snake(ser.class_name)}_nullable_{_snake(field_name)}",
                         nullable_field=field_name,
                         payload=nullable_payload,
+                    )
+                )
+            if field_def.allow_blank and strip_array_suffix(field_def.type) == "string":
+                blank_payload = dict(payload)
+                blank_payload[field_name] = ""
+                serializer_blank.append(
+                    SerializerBlankTest(
+                        serializer_class=ser.class_name,
+                        function_name=f"test_{_snake(ser.class_name)}_blank_{_snake(field_name)}",
+                        blank_field=field_name,
+                        payload=blank_payload,
                     )
                 )
 
@@ -261,6 +282,7 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
         serializer_missing=tuple(serializer_missing),
         serializer_invalid_type=tuple(serializer_invalid_type),
         serializer_nullable=tuple(serializer_nullable),
+        serializer_blank=tuple(serializer_blank),
         url_resolve=tuple(url_resolve),
         view_method=tuple(view_method),
         view_bad_request=tuple(view_bad_request),

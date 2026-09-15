@@ -15,6 +15,7 @@ class FieldDefinition(BaseModel):
     type: str = Field(min_length=1)
     required: bool = True
     nullable: bool = False
+    allow_blank: bool = Field(default=False, alias="allowBlank")
     constraints: FieldConstraints | None = None
     error_messages: dict[str, str] | None = Field(default=None, alias="errorMessages")
     remarks: str | None = None

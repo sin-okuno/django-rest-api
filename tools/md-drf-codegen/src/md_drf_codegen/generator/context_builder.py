@@ -71,6 +71,7 @@ class SerializersModuleContext:
     enum_imports: tuple[EnumImportContext, ...] = field(default_factory=tuple)
     needs_regex_validator: bool = False
     needs_enum: bool = False
+    needs_comma_separated_list: bool = False
 
 
 def build_serializers_context(spec: ApiSpec) -> SerializersModuleContext:
@@ -79,10 +80,11 @@ def build_serializers_context(spec: ApiSpec) -> SerializersModuleContext:
     emitted: set[str] = set()
     serializers: list[SerializerRenderContext] = []
     needs_regex = False
+    needs_comma_separated = False
 
     for type_name in ordered:
         type_def = spec.types[type_name]
-        ser, uses_regex = _build_serializer_context(
+        ser, uses_regex, uses_csv_list = _build_serializer_context(
             type_name,
             type_def,
             emitted=emitted,
@@ -92,6 +94,7 @@ def build_serializers_context(spec: ApiSpec) -> SerializersModuleContext:
         serializers.append(ser)
         emitted.add(type_name)
         needs_regex = needs_regex or uses_regex
+        needs_comma_separated = needs_comma_separated or uses_csv_list
 
     return SerializersModuleContext(
         serializers=tuple(serializers),
@@ -99,6 +102,7 @@ def build_serializers_context(spec: ApiSpec) -> SerializersModuleContext:
         enum_imports=enum_imports,
         needs_regex_validator=needs_regex,
         needs_enum=bool(enum_definitions),
+        needs_comma_separated_list=needs_comma_separated,
     )
 
 
@@ -261,13 +265,14 @@ def _build_serializer_context(
     emitted: set[str],
     known: dict[str, TypeDefinition],
     enum_class_by_field: dict[tuple[str, str], str],
-) -> tuple[SerializerRenderContext, bool]:
+) -> tuple[SerializerRenderContext, bool, bool]:
     body_fields: list[FieldRenderContext] = []
     deferred_fields: list[FieldRenderContext] = []
     needs_regex = False
+    needs_csv_list = False
 
     for field_name, field_def in type_def.fields.items():
-        field_ctx, uses_regex = _build_field_context(
+        field_ctx, uses_regex, uses_csv_list = _build_field_context(
             field_name,
             field_def,
             owner=type_name,
@@ -276,6 +281,7 @@ def _build_serializer_context(
             enum_class_name=enum_class_by_field.get((type_name, field_name)),
         )
         needs_regex = needs_regex or uses_regex
+        needs_csv_list = needs_csv_list or uses_csv_list
         if field_ctx.deferred:
             deferred_fields.append(field_ctx)
         else:
@@ -289,6 +295,7 @@ def _build_serializer_context(
             deferred_fields=tuple(deferred_fields),
         ),
         needs_regex,
+        needs_csv_list,
     )
 
 
@@ -300,7 +307,7 @@ def _build_field_context(
     emitted: set[str],
     known: dict[str, TypeDefinition],
     enum_class_name: str | None,
-) -> tuple[FieldRenderContext, bool]:
+) -> tuple[FieldRenderContext, bool, bool]:
     required = field_def.required
     allow_null = field_def.nullable
     base = strip_array_suffix(field_def.type)
@@ -313,22 +320,35 @@ def _build_field_context(
             many=many,
             required=required,
             allow_null=allow_null,
+            allow_blank=field_def.allow_blank,
             constraints=field_def.constraints,
             error_messages=field_def.error_messages,
             enum_class_name=enum_class_name,
         )
-        return FieldRenderContext(name=name, expression=expression, deferred=False), uses_regex
+        return (
+            FieldRenderContext(name=name, expression=expression, deferred=False),
+            uses_regex,
+            many,
+        )
 
     if base == owner or base not in emitted:
         expression = _nested_expression(base, many=many, required=required, allow_null=allow_null)
-        return FieldRenderContext(name=name, expression=expression, deferred=True), False
+        return FieldRenderContext(name=name, expression=expression, deferred=True), False, False
 
     expression = _nested_expression(base, many=many, required=required, allow_null=allow_null)
-    return FieldRenderContext(name=name, expression=expression, deferred=False), False
+    return FieldRenderContext(name=name, expression=expression, deferred=False), False, False
 
 
-def _kwargs_parts(required: bool, allow_null: bool) -> list[str]:
-    return [f"required={_bool(required)}", f"allow_null={_bool(allow_null)}"]
+def _kwargs_parts(
+    required: bool,
+    allow_null: bool,
+    *,
+    allow_blank: bool | None = None,
+) -> list[str]:
+    parts = [f"required={_bool(required)}", f"allow_null={_bool(allow_null)}"]
+    if allow_blank is not None:
+        parts.append(f"allow_blank={_bool(allow_blank)}")
+    return parts
 
 
 def _bool(value: bool) -> str:
@@ -392,6 +412,7 @@ def _primitive_expression(
     many: bool,
     required: bool,
     allow_null: bool,
+    allow_blank: bool = False,
     constraints: FieldConstraints | None,
     error_messages: dict[str, str] | None = None,
     enum_class_name: str | None = None,
@@ -404,6 +425,8 @@ def _primitive_expression(
         )
 
     filtered_messages = _serializer_error_messages_for_field(error_messages)
+    # allow_blank applies to string CharField / string ChoiceField only.
+    blank = allow_blank if base == "string" else None
 
     if constraints is not None and (constraints.enum or constraints.enum_ref):
         if not enum_class_name:
@@ -417,6 +440,7 @@ def _primitive_expression(
             many=many,
             required=required,
             allow_null=allow_null,
+            allow_blank=blank,
             error_messages=filtered_messages,
         ), False
 
@@ -424,24 +448,25 @@ def _primitive_expression(
     constraint_parts, uses_regex = _constraint_parts(
         base,
         constraints,
-        error_messages=filtered_messages,
+        error_messages=error_messages,
     )
     base_kwargs = (
-        _kwargs_parts(required, allow_null)
+        _kwargs_parts(required, allow_null, allow_blank=blank)
         + constraint_parts
         + _error_messages_part(filtered_messages)
     )
     kwargs = ", ".join(base_kwargs)
 
     if many:
+        child_blank = blank if blank is not None else None
         child_kwargs = ", ".join(
-            _kwargs_parts(True, False)
+            _kwargs_parts(True, False, allow_blank=child_blank)
             + constraint_parts
             + _error_messages_part(filtered_messages)
         )
         child_expr = f"{field_cls}({child_kwargs})"
         list_kwargs = ", ".join(_kwargs_parts(required, allow_null))
-        return f"serializers.ListField(child={child_expr}, {list_kwargs})", uses_regex
+        return f"CommaSeparatedListField(child={child_expr}, {list_kwargs})", uses_regex
 
     return f"{field_cls}({kwargs})", uses_regex
 
@@ -452,6 +477,7 @@ def _choice_expression(
     many: bool,
     required: bool,
     allow_null: bool,
+    allow_blank: bool | None = None,
     error_messages: dict[str, str] | None,
 ) -> str:
     choice_messages = None
@@ -462,14 +488,22 @@ def _choice_expression(
 
     # Compatible with stdlib Enum (and Django Choices, which subclass Enum).
     choices_expr = f"[(m.value, m.name) for m in {enum_class_name}]"
-    parts = [f"choices={choices_expr}"] + _kwargs_parts(required, allow_null)
+    if many:
+        child_parts = [f"choices={choices_expr}"] + _kwargs_parts(
+            True, False, allow_blank=allow_blank
+        )
+        child_parts.extend(_error_messages_part(choice_messages))
+        child_kwargs = ", ".join(child_parts)
+        child_expr = f"serializers.ChoiceField({child_kwargs})"
+        list_kwargs = ", ".join(_kwargs_parts(required, allow_null))
+        return f"CommaSeparatedListField(child={child_expr}, {list_kwargs})"
+
+    parts = [f"choices={choices_expr}"] + _kwargs_parts(
+        required, allow_null, allow_blank=allow_blank
+    )
     parts.extend(_error_messages_part(choice_messages))
     kwargs = ", ".join(parts)
-    field_expr = f"serializers.ChoiceField({kwargs})"
-    if many:
-        list_kwargs = ", ".join(_kwargs_parts(required, allow_null))
-        return f"serializers.ListField(child={field_expr}, {list_kwargs})"
-    return field_expr
+    return f"serializers.ChoiceField({kwargs})"
 
 
 def _serializer_error_messages_for_field(
