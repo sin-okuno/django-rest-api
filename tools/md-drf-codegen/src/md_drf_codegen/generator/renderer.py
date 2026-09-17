@@ -59,8 +59,14 @@ def render_views(context: ViewsModuleContext) -> str:
         path_validators_module=context.path_validators_module,
         handler_imports=context.handler_imports,
         handlers_module=context.handlers_module,
+        exceptions_module=context.exceptions_module,
         needs_transaction=context.needs_transaction,
     )
+
+
+def render_exceptions() -> str:
+    template = _environment().get_template("exceptions.py.j2")
+    return template.render()
 
 
 def render_handlers(context: HandlersModuleContext) -> str:

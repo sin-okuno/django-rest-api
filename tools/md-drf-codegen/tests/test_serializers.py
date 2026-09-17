@@ -137,6 +137,7 @@ def test_number_uses_decimal_field() -> None:
 
 def test_response_only_types_are_read_only() -> None:
     from md_drf_codegen.schema import ApiEndpoint, HttpMethod, PathParameterDefinition
+    from md_drf_codegen.schema.constraints import FieldConstraints
 
     spec = ApiSpec(
         version=1,
@@ -176,8 +177,18 @@ def test_response_only_types_are_read_only() -> None:
             ),
             "ItemResponse": TypeDefinition(
                 fields={
-                    "price": FieldDefinition(type="number", required=True, nullable=False),
-                    "name": FieldDefinition(type="string", required=True, nullable=False),
+                    "price": FieldDefinition(
+                        type="number",
+                        required=True,
+                        nullable=False,
+                        constraints=FieldConstraints(min=1, max=999999),
+                    ),
+                    "name": FieldDefinition(
+                        type="string",
+                        required=True,
+                        nullable=False,
+                        constraints=FieldConstraints(max_length=50),
+                    ),
                 }
             ),
             "Orphan": TypeDefinition(
@@ -189,8 +200,14 @@ def test_response_only_types_are_read_only() -> None:
     code = next(iter(files.values()))
 
     assert "class ItemResponseSerializer" in code
-    assert "read_only=True, max_digits=20, decimal_places=6" in code
-    assert "allow_blank=False, read_only=True" in code
+    response_block = code.split("class ItemResponseSerializer")[1].split("class ")[0]
+    assert "read_only=True, max_digits=20, decimal_places=6" in response_block
+    assert "name = serializers.CharField(required=True, allow_null=False, read_only=True)" in (
+        response_block
+    )
+    assert "min_value=" not in response_block
+    assert "max_length=" not in response_block
+    assert "allow_blank=" not in response_block
 
     assert "class ItemUpdateRequestSerializer" in code
     assert "max_digits=20, decimal_places=6" in code
@@ -204,6 +221,60 @@ def test_response_only_types_are_read_only() -> None:
     assert "class OrphanSerializer" in code
     orphan_block = code.split("class OrphanSerializer")[1]
     assert "read_only=True" not in orphan_block
+    ast.parse(code)
+
+
+def test_body_array_uses_list_field_query_uses_csv() -> None:
+    from md_drf_codegen.schema import ApiEndpoint, HttpMethod
+
+    spec = ApiSpec(
+        version=1,
+        apis=[
+            ApiEndpoint(
+                id="listItems",
+                name="一覧",
+                method=HttpMethod.GET,
+                path="/api/items",
+                requestType="ItemListRequest",
+                responseType="ItemListResponse",
+            ),
+            ApiEndpoint(
+                id="createItem",
+                name="作成",
+                method=HttpMethod.POST,
+                path="/api/items",
+                requestType="ItemCreateRequest",
+                responseType="ItemListResponse",
+            ),
+        ],
+        types={
+            "ItemListRequest": TypeDefinition(
+                fields={
+                    "tags": FieldDefinition(type="string[]", required=False, nullable=False),
+                }
+            ),
+            "ItemCreateRequest": TypeDefinition(
+                fields={
+                    "tags": FieldDefinition(type="string[]", required=False, nullable=False),
+                }
+            ),
+            "ItemListResponse": TypeDefinition(
+                fields={
+                    "items": FieldDefinition(type="string[]", required=True, nullable=False),
+                }
+            ),
+        },
+    )
+    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
+    code = next(iter(files.values()))
+    list_req = code.split("class ItemListRequestSerializer")[1].split("class ")[0]
+    create_req = code.split("class ItemCreateRequestSerializer")[1].split("class ")[0]
+    list_res = code.split("class ItemListResponseSerializer")[1].split("class ")[0]
+    assert "CommaSeparatedListField(child=serializers.CharField(" in list_req
+    assert "serializers.ListField(child=serializers.CharField(" in create_req
+    assert "CommaSeparatedListField" not in create_req
+    assert "serializers.ListField(child=serializers.CharField(" in list_res
+    assert "read_only=True" in list_res
     ast.parse(code)
 
 

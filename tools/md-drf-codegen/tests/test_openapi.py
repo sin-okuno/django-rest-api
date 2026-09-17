@@ -172,11 +172,13 @@ def test_openapi_query_array_is_comma_separated() -> None:
 
     product_md = Path(__file__).resolve().parents[1] / "examples" / "product.md"
     spec = extract_from_markdown(product_md)
-    raw = dump_openapi_yaml(spec, title="Product API")
+    assert spec.title == "製品 API 仕様書"
+    raw = dump_openapi_yaml(spec)
     assert raw.startswith("# AUTO-GENERATED FILE.")
     body = "\n".join(line for line in raw.splitlines() if not line.startswith("#"))
     doc = yaml.safe_load(body)
     assert doc["openapi"] == "3.0.3"
+    assert doc["info"]["title"] == "製品 API 仕様書"
     assert "/api/products/{productId}" in doc["paths"]
     updated = doc["components"]["schemas"]["ProductDetailResponse"]["properties"][
         "updatedDate"

@@ -134,7 +134,7 @@ def put(...) -> Response:
         with transaction.atomic():
             payload = handle_update_product(...)
         return Response(ProductDetailResponseSerializer(instance=payload).data)
-    except APIException:
+    except (APIException, Http404, PermissionDenied):
         raise
     except Exception as exc:
         logger.exception(...)
@@ -142,6 +142,7 @@ def put(...) -> Response:
 ```
 
 POST / PUT / DELETE の `transaction.atomic()` は **Handler 呼び出しのみ**を囲みます（パス検証・リクエスト Serializer 検証・レスポンス整形は外）。  
+POST でレスポンス型がある場合は `201 Created` を返します。
 レスポンスは入力検証（`data=` + `is_valid`）せず、`Serializer(instance=payload).data` で整形します。  
 予期しない例外はログに残し、固定メッセージの `APIException` サブクラスを再送出して **DRF の exception handler** に処理させます（View 内で 500 Response を自作しません）。
 
@@ -173,6 +174,7 @@ def get(
 ```markdown
 | API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 | 備考 |
 | listProducts | 製品一覧取得 | GET | /api/products | ProductListRequest | ProductListResponse | キーワード検索 |
+| createProduct | 製品作成 | POST | /api/products | ProductCreateRequest | ProductDetailResponse | 新規登録 |
 | getProduct | 製品詳細取得 | GET | /api/products/{productId} | ProductDetailQuery | ProductDetailResponse | - |
 | updateProduct | 製品更新 | PUT | /api/products/{productId} | ProductUpdateRequest | ProductDetailResponse | 楽観ロック |
 | deleteProduct | 製品削除 | DELETE | /api/products/{productId} | - | - | レスポンス型なし → 204 |
@@ -184,6 +186,7 @@ def get(
 | ProductListRequest | statuses | integer[] | false | false | enum:1:Low、2:Middle、3:High, ref:Status | クエリはカンマ区切り |
 | ProductListRequest | tags | string[] | false | false | - | クエリはカンマ区切り |
 | ProductDetailQuery | includeDeleted | boolean | false | false | - | - |
+| ProductCreateRequest | tags | string[] | false | false | - | ボディは JSON 配列 |
 | ProductUpdateRequest | tags | string[] | false | false | - | ボディは JSON 配列 |
 ```
 
@@ -200,14 +203,13 @@ def get(
 #### 配列（クエリとリクエストボディ）
 
 Markdown 上の型はどちらも同じ `string[]` / `integer[]`（Enum 付きも可）です。  
-**記載の仕方は共通**で、**呼び出し側の渡し方だけが GET（クエリ）と POST/PUT（ボディ）で異なります**。
+**記載の仕方は共通**で、**呼び出し側の渡し方と生成フィールド**が GET（クエリ）と POST/PUT（ボディ）で異なります。
 
-生成フィールドは常に `CommaSeparatedListField`（`ListField` の拡張）です。
-
-| 用途 | API メソッド | リクエストの受け取り | クライアントの渡し方 | 例 |
-|------|-------------|---------------------|---------------------|----|
-| クエリ配列 | GET | `request.query_params` | **カンマ区切り 1 パラメータ** | `?tags=a,b,c` / `?statuses=1,3` |
-| ボディ配列 | POST / PUT | `request.data` | **JSON 配列**（推奨） | `{"tags": ["a", "b", "c"]}` |
+| 用途 | API メソッド | 生成フィールド | クライアントの渡し方 | 例 |
+|------|-------------|----------------|---------------------|----|
+| クエリ配列 | GET / DELETE | `CommaSeparatedListField` | **カンマ区切り 1 パラメータ** | `?tags=a,b,c` |
+| ボディ配列 | POST / PUT | `serializers.ListField` | **JSON 配列** | `{"tags": ["a", "b"]}` |
+| レスポンス配列 | - | `ListField`（`read_only`） | JSON 配列 | `{"items": [...]}` |
 
 ```markdown
 # 同じ型表記（string[] / integer[]）
@@ -238,8 +240,6 @@ OpenAPI ではクエリ配列を `style: form` / `explode: false`（カンマ区
   "tags": ["alpha", "beta"]
 }
 ```
-
-`CommaSeparatedListField` は互換のため、ボディでも `"tags": "alpha,beta"` のようなカンマ区切り文字列を受け付けますが、**JSON 配列を推奨**します。
 
 | Markdown 型 | クエリ例 | ボディ JSON 例 | 検証後の値 |
 |-------------|---------|----------------|------------|
@@ -732,22 +732,23 @@ md-drf-codegen build examples/product.md --target all
 
 既存ファイルがある場合、通常はエラーになります。上書きするには `--force` を指定します。
 
-ただし `{prefix}_handlers.py` は業務実装の差し替え先のため、**`--force` だけでは上書きしません**。  
-スタブを作り直すときだけ `--force-handlers` を併用してください。
+ただし `{prefix}_handlers.py` は業務実装の差し替え先のため、**`--force` だけでは全置換しません**。  
+不足している handler 関数だけ追記します。スタブを作り直すときだけ `--force-handlers` を併用してください。
 
 ### `--check`
 
 ファイルを書き換えず、生成結果と既存ファイルの差分を検証します（CI 向け）。差分がある場合は非 0 終了します。  
-既存の `{prefix}_handlers.py` は内容比較の対象外です（存在すれば OK）。
+既存の `{prefix}_handlers.py` は内容の完全一致は見ず、**生成側にある関数名が揃っているか**を確認します。
 
 ## 生成ファイル一覧
 
 `--target all` 時:
 
 - `{prefix}_serializers.py`
-- `{prefix}_handlers.py`（初回のみ生成 / create-once。デモ応答の差し替え先）
+- `{prefix}_handlers.py`（初回生成 + 不足関数の追記。デモ応答の差し替え先）
 - `{prefix}_path_validators.py`（パスパラメータ定義がある場合）
 - `{prefix}_views.py`
+- `exceptions.py`（`InternalServerError` など View 共通例外）
 - `urls.py`
 - `openapi.yaml`
 - `test_serializers.py`
@@ -769,13 +770,16 @@ md-drf-codegen generate product-api.yaml \
 ## 設計判断
 
 - `number` 型は `DecimalField`（既定 `max_digits=20`, `decimal_places=6`）を生成します。金額・数量の float 精度リスクを避けるためです。
-- API一覧で **レスポンス型にのみ** 使われる型（およびそのネスト）のフィールドは `read_only=True` になります。リクエスト型にも現れる型は書き込み用のままです。
+- API一覧で **レスポンス型にのみ** 使われる型（およびそのネスト）のフィールドは `read_only=True` になり、入力向け制約（`max_length` / Regex / `min_value` など）は付けません。
+- 配列は用途でフィールドが分かれます。クエリ専用型は `CommaSeparatedListField`、ボディ専用型とレスポンスは `ListField` です。
+- OpenAPI の `info.title` は Markdown の H1（ApiSpec `title`）を使います。無い場合のみ先頭 API 名にフォールバックします。
 - Enum の ChoiceField は標準 `Enum` 向け（`[(m.value, m.name) for m in X]`）。Django `IntegerChoices` も動作しますが、既存定数は標準 `Enum` を想定しています。
 - View は薄い委譲層とし、業務処理は `{prefix}_handlers.py` の関数に切り出します（初期実装はデモデータを返します）。
 - Handler の戻り値はレスポンス型 Serializer の `instance=` で整形してから `Response` に載せます（入力用 `is_valid` は使いません）。
-- View は `APIException`（`ValidationError` 含む）を再送出し、予期しない例外はログ後に `InternalServerError`（固定 detail）へ変換して DRF の exception handler に委譲します。
+- View は `APIException` / `Http404` / `PermissionDenied` を再送出し、予期しない例外はログ後に `InternalServerError`（固定 detail）へ変換して DRF の exception handler に委譲します。
 - POST / PUT / DELETE は Handler 呼び出しを `with transaction.atomic():` で囲みます（パス検証・入力 Serializer・レスポンス整形は外。GET は対象外）。
-- `{prefix}_handlers.py` は **初回のみ生成**（create-once）。`--force` では上書きせず、意図的な再生成時のみ `--force-handlers` を使います。
+- POST でレスポンス型がある場合は **201 Created** を返します。
+- `{prefix}_handlers.py` は既存実装を残しつつ、**不足関数だけ追記**します。全置換は `--force-handlers` のみです。
 - 同一パスに複数 HTTP メソッドがある場合、1 つの `APIView` にまとめます。クラス名 / URL name はパス由来（例: `ApiProductsProductIdAPIView` / `api-products-product-id`）。
 - DELETE でレスポンス型が無い場合は **204 No Content** を返します。
 

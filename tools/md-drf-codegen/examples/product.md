@@ -5,6 +5,7 @@
 | API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 | 備考 |
 | --- | --- | --- | --- | --- | --- | --- |
 | listProducts | 製品一覧取得 | GET | /api/products | ProductListRequest | ProductListResponse | キーワード検索・ページング |
+| createProduct | 製品作成 | POST | /api/products | ProductCreateRequest | ProductDetailResponse | 新規登録 |
 | getProduct | 製品詳細取得 | GET | /api/products/{productId} | ProductDetailQuery | ProductDetailResponse | - |
 | updateProduct | 製品更新 | PUT | /api/products/{productId} | ProductUpdateRequest | ProductDetailResponse | 楽観ロック（revision） |
 | deleteProduct | 製品削除 | DELETE | /api/products/{productId} | - | - | レスポンス型なし → 204 No Content |
@@ -41,6 +42,11 @@
 | ProductDetailResponse | revision | integer | true | false | 1-50 | - | 楽観ロック用 |
 | ProductDetailResponse | status | integer | true | false | enum:1:Low、2:Middle、3:High | - | Status Enum 参照 |
 | ProductDetailResponse | updatedDate | date | true | false | - | - | 最終更新日 |
+| ProductCreateRequest | productName | string | true | false | 最大50文字 | required:製品名は必須です; max_length:製品名は50文字以内で入力してください | - |
+| ProductCreateRequest | description | string | false | true,blank | 最大200文字 | - | null または空文字可 |
+| ProductCreateRequest | price | number | true | false | 1-999999 | - | - |
+| ProductCreateRequest | status | integer | true | false | enum:1:Low、2:Middle、3:High | invalid_choice:ステータスの値が正しくありません | Status Enum 参照 |
+| ProductCreateRequest | tags | string[] | false | false | - | - | JSON 配列（例: ["alpha","beta"]） |
 | ProductUpdateRequest | productName | string | true | false | 最大50文字 | required:製品名は必須です; max_length:製品名は50文字以内で入力してください | - |
 | ProductUpdateRequest | price | number | true | false | 1-999999 | - | - |
 | ProductUpdateRequest | revision | integer | true | false | 1-50 | - | 楽観ロック用 |

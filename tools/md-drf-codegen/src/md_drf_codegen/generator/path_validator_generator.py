@@ -39,6 +39,7 @@ def build_path_validators_context(
         snake_name = camel_to_snake(camel_name)
         function_name = f"validate_{snake_name}"
         body_lines, pattern_const, pattern_regex, uses_re = _build_validator_body(
+            camel_name,
             snake_name,
             param_def,
         )
@@ -108,6 +109,7 @@ def build_invalid_path_param_value(param_def: PathParameterDefinition) -> str:
 
 
 def _build_validator_body(
+    camel_name: str,
     snake_name: str,
     param_def: PathParameterDefinition,
 ) -> tuple[list[str], str | None, str | None, bool]:
@@ -154,7 +156,7 @@ def _build_validator_body(
         )
 
     lines.append("    if errors:")
-    lines.append(f'        raise ValidationError({{"{snake_name}": errors}})')
+    lines.append(f'        raise ValidationError({{"{camel_name}": errors}})')
     lines.append("    return value")
     return lines, pattern_const, pattern_regex, uses_re
 

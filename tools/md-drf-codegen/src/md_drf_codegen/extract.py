@@ -26,6 +26,7 @@ def extract_from_document(
 ) -> ApiSpec:
     return ApiSpec(
         version=1,
+        title=document.title,
         apis=parse_api_endpoints(document),
         types=parse_type_definitions(document),
         path_parameters=parse_path_parameters(document),

@@ -88,6 +88,11 @@ def path_validators_module_name(prefix: str) -> str:
     return f"{prefix}_path_validators"
 
 
+def exceptions_module_name() -> str:
+    """Return the shared exceptions module name (package-local, not prefix-scoped)."""
+    return "exceptions"
+
+
 def serializer_class_name(type_name: str) -> str:
     """Map ``ProductDetailResponse`` to ``ProductDetailResponseSerializer``."""
     return f"{type_name}Serializer"

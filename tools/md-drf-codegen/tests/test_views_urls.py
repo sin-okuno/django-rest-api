@@ -73,10 +73,14 @@ def test_views_and_urls_generate() -> None:
     assert "instance=payload" in views
     assert "response_serializer.is_valid" not in views
     assert "NotImplementedError" not in views
-    assert "except APIException:" in views
-    assert "InternalServerError" in views
-    assert "logger.exception" in views
-    assert "内部エラーが発生しました。" in views
+    assert "except (APIException, Http404, PermissionDenied):" in views
+    assert "from django.http import Http404" in views
+    assert "from django.core.exceptions import PermissionDenied" in views
+    assert "from .exceptions import InternalServerError" in views
+    assert "class InternalServerError" not in views
+    exceptions = files["exceptions.py"]
+    assert "class InternalServerError(APIException):" in exceptions
+    assert "内部エラーが発生しました。" in exceptions
     assert "raise InternalServerError()" in views
     assert "return Response(\n                {\"detail\":" not in views
     assert "str(exc)" not in views
@@ -87,9 +91,11 @@ def test_views_and_urls_generate() -> None:
     assert "product_id" in views
     assert "validate_product_id" in views
     assert "ValidationError" in path_validators
+    assert '{"productId": errors}' in path_validators or "'productId': errors" in path_validators
     assert "get-product" in urls or "api-products" in urls
     assert "<str:product_id>" in urls
     ast.parse(views)
+    ast.parse(exceptions)
     ast.parse(handlers)
     ast.parse(urls)
 
@@ -108,6 +114,44 @@ def test_put_api_includes_path_parameter() -> None:
     )
     get_body = views.split("def get(")[1].split("def ")[0]
     assert "with transaction.atomic():" not in get_body
+
+
+def test_post_api_returns_201_created() -> None:
+    spec = ApiSpec(
+        version=1,
+        apis=[
+            ApiEndpoint(
+                id="createProduct",
+                name="作成",
+                method=HttpMethod.POST,
+                path="/api/products",
+                requestType="ProductCreateRequest",
+                responseType="ProductDetailResponse",
+            ),
+        ],
+        types={
+            "ProductCreateRequest": TypeDefinition(
+                fields={
+                    "productName": FieldDefinition(type="string", required=True, nullable=False),
+                }
+            ),
+            "ProductDetailResponse": TypeDefinition(
+                fields={
+                    "productId": FieldDefinition(type="string", required=True, nullable=False),
+                }
+            ),
+        },
+    )
+    files = generate_code_files(spec, target=GenerateTarget.ALL, package_name="product")
+    views = files["product_views.py"]
+    openapi = files["openapi.yaml"]
+    post_body = views.split("def post(")[1].split("def ")[0]
+    assert "HTTP_201_CREATED" in post_body
+    assert "handle_create_product" in post_body
+    assert "with transaction.atomic():" in post_body
+    assert "201" in openapi
+    assert "Created" in openapi
+    ast.parse(views)
 
 
 def test_delete_api_generates_view_and_handler() -> None:
@@ -287,16 +331,26 @@ def test_product_markdown_extracts_query_types() -> None:
     product_md = Path(__file__).resolve().parents[1] / "examples" / "product.md"
     spec = extract_from_markdown(product_md)
     list_api = next(api for api in spec.apis if api.id == "listProducts")
+    create_api = next(api for api in spec.apis if api.id == "createProduct")
     get_api = next(api for api in spec.apis if api.id == "getProduct")
     put_api = next(api for api in spec.apis if api.id == "updateProduct")
 
     assert list_api.request_type == "ProductListRequest"
+    assert create_api.method.value == "POST"
+    assert create_api.request_type == "ProductCreateRequest"
+    assert create_api.response_type == "ProductDetailResponse"
     assert get_api.request_type == "ProductDetailQuery"
     assert put_api.request_type == "ProductUpdateRequest"
     assert "ProductListRequest" in spec.types
+    assert "ProductCreateRequest" in spec.types
     assert "ProductDetailQuery" in spec.types
 
-    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="product")
-    serializers = "\n".join(files.values())
+    files = generate_code_files(spec, target=GenerateTarget.ALL, package_name="product")
+    serializers = files["product_serializers.py"]
+    views = files["product_views.py"]
     assert "ProductListRequestSerializer" in serializers
+    assert "ProductCreateRequestSerializer" in serializers
     assert "ProductDetailQuerySerializer" in serializers
+    assert "def post(" in views
+    assert "handle_create_product" in views
+    assert "transaction.atomic()" in views

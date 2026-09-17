@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from md_drf_codegen.errors import CodegenError
+from md_drf_codegen.utils.handler_sync import merge_missing_handler_functions
 from md_drf_codegen.utils.python_validator import validate_python_syntax
 
 
@@ -35,6 +36,8 @@ def write_generated_files(
     When a file exists and *force* is False, raise FileExistsError.
     Names in *preserve_if_exists* are skipped when the file already exists,
     even if *force* is True, unless *force_preserved* is True.
+    For ``*_handlers.py`` in *preserve_if_exists*, missing handler functions from
+    the newly generated content are appended instead of skipping entirely.
     """
     directory = Path(output_dir)
     preserve = preserve_if_exists or frozenset()
@@ -50,6 +53,13 @@ def write_generated_files(
     for name, code in files.items():
         path = directory / name
         if path.exists() and name in preserve and not force_preserved:
+            if name.endswith("_handlers.py"):
+                existing = path.read_text(encoding="utf-8")
+                merged = merge_missing_handler_functions(existing, code)
+                if merged != existing:
+                    validate_python_syntax(merged, source_name=name)
+                    path.write_text(merged, encoding="utf-8", newline="\n")
+                    written.append(path.resolve())
             continue
         if path.exists() and not force:
             raise FileExistsError(path.resolve())
@@ -79,7 +89,11 @@ def _check_files(
         path = directory / name
         checked.append(path.resolve())
         if name in preserve and path.exists():
-            # Customizable stubs (e.g. handlers) are create-once; skip content check.
+            if name.endswith("_handlers.py"):
+                existing = path.read_text(encoding="utf-8")
+                merged = merge_missing_handler_functions(existing, expected)
+                if merged != existing:
+                    mismatches.append(f"handlers missing functions: {path}")
             continue
         if not path.exists():
             mismatches.append(f"missing: {path}")

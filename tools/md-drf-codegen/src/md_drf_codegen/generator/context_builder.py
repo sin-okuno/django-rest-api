@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from md_drf_codegen.errors import SchemaValidationError
 from md_drf_codegen.normalize import is_array_type, is_primitive_type, strip_array_suffix
-from md_drf_codegen.schema import ApiSpec, FieldDefinition, TypeDefinition
+from md_drf_codegen.schema import ApiSpec, FieldDefinition, HttpMethod, TypeDefinition
 from md_drf_codegen.schema.constraints import EnumMember, FieldConstraints
 from md_drf_codegen.utils.naming import (
     enum_class_name_from_field,
@@ -87,16 +87,30 @@ def build_serializers_context(spec: ApiSpec) -> SerializersModuleContext:
     needs_regex = False
     needs_comma_separated = False
     response_only = _response_only_types(spec)
+    query_request_types = _request_types_for_methods(
+        spec, {HttpMethod.GET, HttpMethod.DELETE}
+    )
+    body_request_types = _request_types_for_methods(
+        spec, {HttpMethod.POST, HttpMethod.PUT}
+    )
 
     for type_name in ordered:
         type_def = spec.types[type_name]
+        read_only = type_name in response_only
+        use_comma_separated = _uses_comma_separated_list(
+            type_name,
+            query_types=query_request_types,
+            body_types=body_request_types,
+            read_only=read_only,
+        )
         ser, uses_regex, uses_csv_list = _build_serializer_context(
             type_name,
             type_def,
             emitted=emitted,
             known=spec.types,
             enum_class_by_field=enum_class_by_field,
-            read_only=type_name in response_only,
+            read_only=read_only,
+            use_comma_separated=use_comma_separated,
         )
         serializers.append(ser)
         emitted.add(type_name)
@@ -273,6 +287,7 @@ def _build_serializer_context(
     known: dict[str, TypeDefinition],
     enum_class_by_field: dict[tuple[str, str], str],
     read_only: bool = False,
+    use_comma_separated: bool = True,
 ) -> tuple[SerializerRenderContext, bool, bool]:
     body_fields: list[FieldRenderContext] = []
     deferred_fields: list[FieldRenderContext] = []
@@ -288,6 +303,7 @@ def _build_serializer_context(
             known=known,
             enum_class_name=enum_class_by_field.get((type_name, field_name)),
             read_only=read_only,
+            use_comma_separated=use_comma_separated,
         )
         needs_regex = needs_regex or uses_regex
         needs_csv_list = needs_csv_list or uses_csv_list
@@ -317,6 +333,7 @@ def _build_field_context(
     known: dict[str, TypeDefinition],
     enum_class_name: str | None,
     read_only: bool = False,
+    use_comma_separated: bool = True,
 ) -> tuple[FieldRenderContext, bool, bool]:
     required = field_def.required
     allow_null = field_def.nullable
@@ -335,11 +352,12 @@ def _build_field_context(
             error_messages=field_def.error_messages,
             enum_class_name=enum_class_name,
             read_only=read_only,
+            use_comma_separated=use_comma_separated,
         )
         return (
             FieldRenderContext(name=name, expression=expression, deferred=False),
             uses_regex,
-            many and not read_only,
+            many and use_comma_separated,
         )
 
     if base == owner or base not in emitted:
@@ -444,6 +462,7 @@ def _primitive_expression(
     error_messages: dict[str, str] | None = None,
     enum_class_name: str | None = None,
     read_only: bool = False,
+    use_comma_separated: bool = True,
 ) -> tuple[str, bool]:
     if base not in PRIMITIVE_FIELD_CLASS:
         raise SchemaValidationError(
@@ -452,9 +471,13 @@ def _primitive_expression(
             fix="Use string, integer, number, boolean, date, datetime, or object.",
         )
 
-    filtered_messages = _serializer_error_messages_for_field(error_messages)
     # allow_blank applies to string CharField / string ChoiceField only.
     blank = allow_blank if base == "string" else None
+    # Response-only serializers omit input constraints / custom error messages.
+    effective_constraints = None if read_only else constraints
+    filtered_messages = (
+        None if read_only else _serializer_error_messages_for_field(error_messages)
+    )
 
     if constraints is not None and (constraints.enum or constraints.enum_ref):
         if not enum_class_name:
@@ -468,20 +491,26 @@ def _primitive_expression(
             many=many,
             required=required,
             allow_null=allow_null,
-            allow_blank=blank,
+            allow_blank=None if read_only else blank,
             error_messages=filtered_messages,
             read_only=read_only,
+            use_comma_separated=use_comma_separated,
         ), False
 
     field_cls = PRIMITIVE_FIELD_CLASS[base]
     constraint_parts, uses_regex = _constraint_parts(
         base,
-        constraints,
-        error_messages=error_messages,
+        effective_constraints,
+        error_messages=error_messages if not read_only else None,
     )
     decimal_parts = _decimal_parts(base)
     base_kwargs = (
-        _kwargs_parts(required, allow_null, allow_blank=blank, read_only=read_only)
+        _kwargs_parts(
+            required,
+            allow_null,
+            allow_blank=None if read_only else blank,
+            read_only=read_only,
+        )
         + decimal_parts
         + constraint_parts
         + _error_messages_part(filtered_messages)
@@ -489,7 +518,7 @@ def _primitive_expression(
     kwargs = ", ".join(base_kwargs)
 
     if many:
-        child_blank = blank if blank is not None else None
+        child_blank = None if read_only else (blank if blank is not None else None)
         child_kwargs = ", ".join(
             _kwargs_parts(True, False, allow_blank=child_blank)
             + decimal_parts
@@ -500,9 +529,12 @@ def _primitive_expression(
         list_kwargs = ", ".join(
             _kwargs_parts(required, allow_null, read_only=read_only)
         )
-        if read_only:
-            return f"serializers.ListField(child={child_expr}, {list_kwargs})", uses_regex
-        return f"CommaSeparatedListField(child={child_expr}, {list_kwargs})", uses_regex
+        list_cls = (
+            "CommaSeparatedListField"
+            if use_comma_separated
+            else "serializers.ListField"
+        )
+        return f"{list_cls}(child={child_expr}, {list_kwargs})", uses_regex
 
     return f"{field_cls}({kwargs})", uses_regex
 
@@ -516,6 +548,7 @@ def _choice_expression(
     allow_blank: bool | None = None,
     error_messages: dict[str, str] | None,
     read_only: bool = False,
+    use_comma_separated: bool = True,
 ) -> str:
     choice_messages = None
     if error_messages:
@@ -535,9 +568,12 @@ def _choice_expression(
         list_kwargs = ", ".join(
             _kwargs_parts(required, allow_null, read_only=read_only)
         )
-        if read_only:
-            return f"serializers.ListField(child={child_expr}, {list_kwargs})"
-        return f"CommaSeparatedListField(child={child_expr}, {list_kwargs})"
+        list_cls = (
+            "CommaSeparatedListField"
+            if use_comma_separated
+            else "serializers.ListField"
+        )
+        return f"{list_cls}(child={child_expr}, {list_kwargs})"
 
     parts = [f"choices={choices_expr}"] + _kwargs_parts(
         required, allow_null, allow_blank=allow_blank, read_only=read_only
@@ -578,6 +614,28 @@ def _response_only_types(spec: ApiSpec) -> set[str]:
     request_closure = _type_closure(request_roots, spec.types)
     response_closure = _type_closure(response_roots, spec.types)
     return response_closure - request_closure
+
+
+def _request_types_for_methods(spec: ApiSpec, methods: set[HttpMethod]) -> set[str]:
+    roots = {
+        api.request_type
+        for api in spec.apis
+        if api.request_type and api.method in methods
+    }
+    return _type_closure(roots, spec.types)
+
+
+def _uses_comma_separated_list(
+    type_name: str,
+    *,
+    query_types: set[str],
+    body_types: set[str],
+    read_only: bool,
+) -> bool:
+    """Query (and orphan) array fields use CSV; body-only arrays use ListField."""
+    if read_only:
+        return False
+    return not (type_name in body_types and type_name not in query_types)
 
 
 def _type_closure(roots: set[str], types: dict[str, TypeDefinition]) -> set[str]:

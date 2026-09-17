@@ -9,6 +9,7 @@ from md_drf_codegen.schema import ApiEndpoint, ApiSpec, HttpMethod, PathParamete
 from md_drf_codegen.utils.naming import (
     artifact_module_names,
     camel_to_snake,
+    exceptions_module_name,
     handler_function_name,
     handlers_module_name,
     path_param_names,
@@ -38,6 +39,7 @@ class MethodRenderContext:
     uses_query_params: bool
     uses_atomic: bool
     no_content: bool
+    created: bool
     path_params: tuple[PathParamContext, ...]
 
 
@@ -58,6 +60,7 @@ class ViewsModuleContext:
     path_validator_imports: tuple[str, ...] = field(default_factory=tuple)
     handlers_module: str = "handlers"
     handler_imports: tuple[str, ...] = field(default_factory=tuple)
+    exceptions_module: str = "exceptions"
     needs_transaction: bool = False
 
 
@@ -101,6 +104,7 @@ def build_views_context(
         path_validator_imports=tuple(sorted(validator_names)),
         handlers_module=handlers_module,
         handler_imports=tuple(sorted(handler_names)),
+        exceptions_module=exceptions_module_name(),
         needs_transaction=needs_transaction,
     )
 
@@ -163,6 +167,9 @@ def _build_view(
                 uses_atomic=endpoint.method in _ATOMIC_METHODS,
                 no_content=bool(
                     endpoint.method == HttpMethod.DELETE and response_serializer is None
+                ),
+                created=bool(
+                    endpoint.method == HttpMethod.POST and response_serializer is not None
                 ),
                 path_params=params,
             )

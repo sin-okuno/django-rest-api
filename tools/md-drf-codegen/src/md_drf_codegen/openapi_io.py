@@ -38,6 +38,8 @@ def dump_openapi_yaml(
 
 
 def _default_title(spec: ApiSpec) -> str:
+    if spec.title:
+        return spec.title
     if spec.apis:
         return spec.apis[0].name
     return "API"

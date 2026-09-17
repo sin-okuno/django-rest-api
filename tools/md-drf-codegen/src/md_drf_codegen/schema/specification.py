@@ -18,6 +18,10 @@ class ApiSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     version: Literal[1] = 1
+    title: str | None = Field(
+        default=None,
+        description="Human-readable API title (Markdown H1 when extracted).",
+    )
     apis: list[ApiEndpoint] = Field(default_factory=list)
     types: dict[str, TypeDefinition] = Field(default_factory=dict)
     path_parameters: dict[str, PathParameterDefinition] = Field(

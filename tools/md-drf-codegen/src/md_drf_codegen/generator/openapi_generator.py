@@ -90,9 +90,16 @@ def _build_responses(endpoint: ApiEndpoint, spec: ApiSpec) -> dict[str, Any]:
             return {"204": {"description": "No Content"}}
         return {"200": {"description": "OK"}}
 
+    if endpoint.method == HttpMethod.POST:
+        status_code = "201"
+        description = "Created"
+    else:
+        status_code = "200"
+        description = "OK"
+
     return {
-        "200": {
-            "description": "OK",
+        status_code: {
+            "description": description,
             "content": {
                 "application/json": {
                     "schema": {"$ref": f"#/components/schemas/{endpoint.response_type}"},
