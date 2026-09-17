@@ -18,12 +18,17 @@ from md_drf_codegen.utils.naming import (
 PRIMITIVE_FIELD_CLASS: dict[str, str] = {
     "string": "serializers.CharField",
     "integer": "serializers.IntegerField",
-    "number": "serializers.FloatField",
+    "number": "serializers.DecimalField",
+    "decimal": "serializers.DecimalField",
     "boolean": "serializers.BooleanField",
     "date": "serializers.DateField",
     "datetime": "serializers.DateTimeField",
     "object": "serializers.JSONField",
 }
+
+# Defaults for DecimalField when Markdown does not specify digit precision.
+_DEFAULT_DECIMAL_MAX_DIGITS = 20
+_DEFAULT_DECIMAL_PLACES = 6
 
 EnumFingerprint = tuple[tuple[str | int | float, str | None], ...]
 
@@ -81,6 +86,7 @@ def build_serializers_context(spec: ApiSpec) -> SerializersModuleContext:
     serializers: list[SerializerRenderContext] = []
     needs_regex = False
     needs_comma_separated = False
+    response_only = _response_only_types(spec)
 
     for type_name in ordered:
         type_def = spec.types[type_name]
@@ -90,6 +96,7 @@ def build_serializers_context(spec: ApiSpec) -> SerializersModuleContext:
             emitted=emitted,
             known=spec.types,
             enum_class_by_field=enum_class_by_field,
+            read_only=type_name in response_only,
         )
         serializers.append(ser)
         emitted.add(type_name)
@@ -265,6 +272,7 @@ def _build_serializer_context(
     emitted: set[str],
     known: dict[str, TypeDefinition],
     enum_class_by_field: dict[tuple[str, str], str],
+    read_only: bool = False,
 ) -> tuple[SerializerRenderContext, bool, bool]:
     body_fields: list[FieldRenderContext] = []
     deferred_fields: list[FieldRenderContext] = []
@@ -279,6 +287,7 @@ def _build_serializer_context(
             emitted=emitted,
             known=known,
             enum_class_name=enum_class_by_field.get((type_name, field_name)),
+            read_only=read_only,
         )
         needs_regex = needs_regex or uses_regex
         needs_csv_list = needs_csv_list or uses_csv_list
@@ -307,6 +316,7 @@ def _build_field_context(
     emitted: set[str],
     known: dict[str, TypeDefinition],
     enum_class_name: str | None,
+    read_only: bool = False,
 ) -> tuple[FieldRenderContext, bool, bool]:
     required = field_def.required
     allow_null = field_def.nullable
@@ -324,18 +334,23 @@ def _build_field_context(
             constraints=field_def.constraints,
             error_messages=field_def.error_messages,
             enum_class_name=enum_class_name,
+            read_only=read_only,
         )
         return (
             FieldRenderContext(name=name, expression=expression, deferred=False),
             uses_regex,
-            many,
+            many and not read_only,
         )
 
     if base == owner or base not in emitted:
-        expression = _nested_expression(base, many=many, required=required, allow_null=allow_null)
+        expression = _nested_expression(
+            base, many=many, required=required, allow_null=allow_null, read_only=read_only
+        )
         return FieldRenderContext(name=name, expression=expression, deferred=True), False, False
 
-    expression = _nested_expression(base, many=many, required=required, allow_null=allow_null)
+    expression = _nested_expression(
+        base, many=many, required=required, allow_null=allow_null, read_only=read_only
+    )
     return FieldRenderContext(name=name, expression=expression, deferred=False), False, False
 
 
@@ -344,10 +359,13 @@ def _kwargs_parts(
     allow_null: bool,
     *,
     allow_blank: bool | None = None,
+    read_only: bool = False,
 ) -> list[str]:
     parts = [f"required={_bool(required)}", f"allow_null={_bool(allow_null)}"]
     if allow_blank is not None:
         parts.append(f"allow_blank={_bool(allow_blank)}")
+    if read_only:
+        parts.append("read_only=True")
     return parts
 
 
@@ -360,6 +378,15 @@ def _error_messages_part(error_messages: dict[str, str] | None) -> list[str]:
         return []
     items = ", ".join(f"{repr(key)}: {repr(value)}" for key, value in error_messages.items())
     return [f"error_messages={{{items}}}"]
+
+
+def _decimal_parts(base: str) -> list[str]:
+    if base not in {"number", "decimal"}:
+        return []
+    return [
+        f"max_digits={_DEFAULT_DECIMAL_MAX_DIGITS}",
+        f"decimal_places={_DEFAULT_DECIMAL_PLACES}",
+    ]
 
 
 def _constraint_parts(
@@ -416,6 +443,7 @@ def _primitive_expression(
     constraints: FieldConstraints | None,
     error_messages: dict[str, str] | None = None,
     enum_class_name: str | None = None,
+    read_only: bool = False,
 ) -> tuple[str, bool]:
     if base not in PRIMITIVE_FIELD_CLASS:
         raise SchemaValidationError(
@@ -442,6 +470,7 @@ def _primitive_expression(
             allow_null=allow_null,
             allow_blank=blank,
             error_messages=filtered_messages,
+            read_only=read_only,
         ), False
 
     field_cls = PRIMITIVE_FIELD_CLASS[base]
@@ -450,8 +479,10 @@ def _primitive_expression(
         constraints,
         error_messages=error_messages,
     )
+    decimal_parts = _decimal_parts(base)
     base_kwargs = (
-        _kwargs_parts(required, allow_null, allow_blank=blank)
+        _kwargs_parts(required, allow_null, allow_blank=blank, read_only=read_only)
+        + decimal_parts
         + constraint_parts
         + _error_messages_part(filtered_messages)
     )
@@ -461,11 +492,16 @@ def _primitive_expression(
         child_blank = blank if blank is not None else None
         child_kwargs = ", ".join(
             _kwargs_parts(True, False, allow_blank=child_blank)
+            + decimal_parts
             + constraint_parts
             + _error_messages_part(filtered_messages)
         )
         child_expr = f"{field_cls}({child_kwargs})"
-        list_kwargs = ", ".join(_kwargs_parts(required, allow_null))
+        list_kwargs = ", ".join(
+            _kwargs_parts(required, allow_null, read_only=read_only)
+        )
+        if read_only:
+            return f"serializers.ListField(child={child_expr}, {list_kwargs})", uses_regex
         return f"CommaSeparatedListField(child={child_expr}, {list_kwargs})", uses_regex
 
     return f"{field_cls}({kwargs})", uses_regex
@@ -479,6 +515,7 @@ def _choice_expression(
     allow_null: bool,
     allow_blank: bool | None = None,
     error_messages: dict[str, str] | None,
+    read_only: bool = False,
 ) -> str:
     choice_messages = None
     if error_messages:
@@ -495,11 +532,15 @@ def _choice_expression(
         child_parts.extend(_error_messages_part(choice_messages))
         child_kwargs = ", ".join(child_parts)
         child_expr = f"serializers.ChoiceField({child_kwargs})"
-        list_kwargs = ", ".join(_kwargs_parts(required, allow_null))
+        list_kwargs = ", ".join(
+            _kwargs_parts(required, allow_null, read_only=read_only)
+        )
+        if read_only:
+            return f"serializers.ListField(child={child_expr}, {list_kwargs})"
         return f"CommaSeparatedListField(child={child_expr}, {list_kwargs})"
 
     parts = [f"choices={choices_expr}"] + _kwargs_parts(
-        required, allow_null, allow_blank=allow_blank
+        required, allow_null, allow_blank=allow_blank, read_only=read_only
     )
     parts.extend(_error_messages_part(choice_messages))
     kwargs = ", ".join(parts)
@@ -521,12 +562,39 @@ def _nested_expression(
     many: bool,
     required: bool,
     allow_null: bool,
+    read_only: bool = False,
 ) -> str:
     cls = serializer_class_name(type_name)
-    kwargs = ", ".join(_kwargs_parts(required, allow_null))
+    kwargs = ", ".join(_kwargs_parts(required, allow_null, read_only=read_only))
     if many:
         return f"{cls}(many=True, {kwargs})"
     return f"{cls}({kwargs})"
+
+
+def _response_only_types(spec: ApiSpec) -> set[str]:
+    """Types reachable only from responseType roots (never from requestType)."""
+    request_roots = {api.request_type for api in spec.apis if api.request_type}
+    response_roots = {api.response_type for api in spec.apis if api.response_type}
+    request_closure = _type_closure(request_roots, spec.types)
+    response_closure = _type_closure(response_roots, spec.types)
+    return response_closure - request_closure
+
+
+def _type_closure(roots: set[str], types: dict[str, TypeDefinition]) -> set[str]:
+    seen: set[str] = set()
+    stack = [name for name in roots if name in types]
+    while stack:
+        name = stack.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        type_def = types.get(name)
+        if type_def is None:
+            continue
+        for dep in _dependencies(name, type_def, known=types):
+            if dep not in seen:
+                stack.append(dep)
+    return seen
 
 
 def _order_types(types: dict[str, TypeDefinition]) -> list[str]:

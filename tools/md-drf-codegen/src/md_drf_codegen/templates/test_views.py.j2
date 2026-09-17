@@ -28,6 +28,11 @@ def {{ item.function_name }}() -> None:
         data={{ item.request_data | topython }},
         format="json",
     )
+{% elif item.http_method == "delete" %}
+    request = factory.delete(
+        {{ item.request_path | topython }}{% if item.uses_query_params and item.request_data %},
+        data={{ item.request_data | topython }}{% endif %},
+    )
 {% else %}
     request = factory.put(
         {{ item.request_path | topython }},
@@ -36,8 +41,12 @@ def {{ item.function_name }}() -> None:
     )
 {% endif %}
     response = view(request, **{{ item.path_kwargs | topython }})
-    assert response.status_code == 200
+    assert response.status_code == {{ item.expected_status }}
+{% if item.expect_body %}
     assert isinstance(response.data, dict)
+{% else %}
+    assert response.data in (None, b"", "")
+{% endif %}
 
 
 {% endfor %}
@@ -54,6 +63,11 @@ def {{ item.function_name }}() -> None:
         {{ item.request_path | topython }},
         data={{ item.invalid_payload | topython }},
         format="json",
+    )
+{% elif item.http_method == "delete" %}
+    request = factory.delete(
+        {{ item.request_path | topython }},
+        data={{ item.invalid_payload | topython }},
     )
 {% else %}
     request = factory.put(

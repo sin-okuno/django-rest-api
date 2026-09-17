@@ -16,6 +16,7 @@ def run_build(
     target: str = "all",
     force: bool = False,
     check: bool = False,
+    force_handlers: bool = False,
 ) -> list[Path]:
     input_abs = input_path.resolve()
 
@@ -32,7 +33,14 @@ def run_build(
             if output is not None and output.suffix in {".yaml", ".yml", ".json"}
             else None
         )
-        return run_generate(yaml_path, openapi_out, target="openapi", force=force, check=check)
+        return run_generate(
+            yaml_path,
+            openapi_out,
+            target="openapi",
+            force=force,
+            check=check,
+            force_handlers=force_handlers,
+        )
 
     yaml_path = DEFAULT_GENERATED_SPECS_DIR / f"{input_abs.stem}-api.yaml"
     run_extract(input_abs, yaml_path)
@@ -40,7 +48,21 @@ def run_build(
 
     if target == "serializer":
         gen_output = output or (DEFAULT_GENERATED_DIR / input_abs.stem)
-        return run_generate(yaml_path, gen_output, target="serializer", force=force, check=check)
+        return run_generate(
+            yaml_path,
+            gen_output,
+            target="serializer",
+            force=force,
+            check=check,
+            force_handlers=force_handlers,
+        )
 
     gen_output = output or (DEFAULT_GENERATED_DIR / input_abs.stem)
-    return run_generate(yaml_path, gen_output, target="all", force=force, check=check)
+    return run_generate(
+        yaml_path,
+        gen_output,
+        target="all",
+        force=force,
+        check=check,
+        force_handlers=force_handlers,
+    )

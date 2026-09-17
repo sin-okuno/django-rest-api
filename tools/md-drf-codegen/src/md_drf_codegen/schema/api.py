@@ -6,13 +6,14 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SUPPORTED_HTTP_METHODS: frozenset[str] = frozenset({"GET", "POST", "PUT"})
+SUPPORTED_HTTP_METHODS: frozenset[str] = frozenset({"GET", "POST", "PUT", "DELETE"})
 
 
 class HttpMethod(StrEnum):
     GET = "GET"
     POST = "POST"
     PUT = "PUT"
+    DELETE = "DELETE"
 
 
 class ApiEndpoint(BaseModel):

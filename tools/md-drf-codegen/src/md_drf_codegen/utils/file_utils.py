@@ -26,20 +26,31 @@ def write_generated_files(
     *,
     force: bool = False,
     check: bool = False,
+    preserve_if_exists: frozenset[str] | None = None,
+    force_preserved: bool = False,
 ) -> list[Path]:
     """Write or check generated files.
 
     When *check* is True, compare content without writing and raise on mismatch.
     When a file exists and *force* is False, raise FileExistsError.
+    Names in *preserve_if_exists* are skipped when the file already exists,
+    even if *force* is True, unless *force_preserved* is True.
     """
     directory = Path(output_dir)
+    preserve = preserve_if_exists or frozenset()
     if check:
-        return _check_files(files, directory)
+        return _check_files(
+            files,
+            directory,
+            preserve_if_exists=preserve,
+        )
 
     directory.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for name, code in files.items():
         path = directory / name
+        if path.exists() and name in preserve and not force_preserved:
+            continue
         if path.exists() and not force:
             raise FileExistsError(path.resolve())
         if name.endswith(".py"):
@@ -54,13 +65,22 @@ def check_generated_files(files: dict[str, str], output_dir: str | Path) -> list
     return _check_files(files, Path(output_dir))
 
 
-def _check_files(files: dict[str, str], directory: Path) -> list[Path]:
+def _check_files(
+    files: dict[str, str],
+    directory: Path,
+    *,
+    preserve_if_exists: frozenset[str] | None = None,
+) -> list[Path]:
     mismatches: list[str] = []
     checked: list[Path] = []
+    preserve = preserve_if_exists or frozenset()
 
     for name, expected in files.items():
         path = directory / name
         checked.append(path.resolve())
+        if name in preserve and path.exists():
+            # Customizable stubs (e.g. handlers) are create-once; skip content check.
+            continue
         if not path.exists():
             mismatches.append(f"missing: {path}")
             continue

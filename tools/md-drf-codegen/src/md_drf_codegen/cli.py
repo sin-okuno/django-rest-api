@@ -53,6 +53,13 @@ Force = Annotated[
     bool,
     typer.Option("--force", help="既存ファイルを上書きする"),
 ]
+ForceHandlers = Annotated[
+    bool,
+    typer.Option(
+        "--force-handlers",
+        help="Handler ファイル（*_handlers.py）も上書きする（業務実装を消すので注意）",
+    ),
+]
 Check = Annotated[
     bool,
     typer.Option("--check", help="差分チェックのみ（CI向け）"),
@@ -93,6 +100,7 @@ def generate_command(
     output: OutputDir = None,
     target: Target = TargetOption.ALL,
     force: Force = False,
+    force_handlers: ForceHandlers = False,
     check: Check = False,
 ) -> None:
     """YAML から Serializer / View / URL / OpenAPI / 基本テストを生成する。"""
@@ -103,6 +111,7 @@ def generate_command(
             target=target.value,
             force=force,
             check=check,
+            force_handlers=force_handlers,
         )
     except CodegenError as exc:
         _handle_error(exc)
@@ -119,6 +128,7 @@ def build_command(
     output: OutputDir = None,
     target: Target = TargetOption.ALL,
     force: Force = False,
+    force_handlers: ForceHandlers = False,
     check: Check = False,
 ) -> None:
     """extract → validate → generate をまとめて実行する。"""
@@ -129,6 +139,7 @@ def build_command(
             target=target.value,
             force=force,
             check=check,
+            force_handlers=force_handlers,
         )
     except CodegenError as exc:
         _handle_error(exc)

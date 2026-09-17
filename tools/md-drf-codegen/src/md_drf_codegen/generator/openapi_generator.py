@@ -10,7 +10,7 @@ from md_drf_codegen.schema.constraints import FieldConstraints
 from md_drf_codegen.utils.naming import path_param_names
 
 _OPENAPI_VERSION = "3.0.3"
-_QUERY_METHODS = {HttpMethod.GET}
+_QUERY_METHODS = {HttpMethod.GET, HttpMethod.DELETE}
 _PRIMITIVE_OPENAPI_SCHEMA: dict[str, dict[str, str]] = {
     "string": {"type": "string"},
     "integer": {"type": "integer"},
@@ -86,6 +86,8 @@ def _build_operation(endpoint: ApiEndpoint, spec: ApiSpec) -> dict[str, Any]:
 
 def _build_responses(endpoint: ApiEndpoint, spec: ApiSpec) -> dict[str, Any]:
     if endpoint.response_type is None:
+        if endpoint.method == HttpMethod.DELETE:
+            return {"204": {"description": "No Content"}}
         return {"200": {"description": "OK"}}
 
     return {

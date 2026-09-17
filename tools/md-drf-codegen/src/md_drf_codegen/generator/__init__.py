@@ -111,5 +111,14 @@ def write_generation_result(
     *,
     force: bool = False,
     check: bool = False,
+    force_handlers: bool = False,
 ) -> list[Path]:
-    return write_generated_files(files, output_dir, force=force, check=check)
+    preserve = frozenset(name for name in files if name.endswith("_handlers.py"))
+    return write_generated_files(
+        files,
+        output_dir,
+        force=force,
+        check=check,
+        preserve_if_exists=preserve,
+        force_preserved=force_handlers,
+    )

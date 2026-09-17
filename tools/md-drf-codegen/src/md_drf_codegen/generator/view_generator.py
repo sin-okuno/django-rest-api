@@ -14,10 +14,11 @@ from md_drf_codegen.utils.naming import (
     path_param_names,
     path_validators_module_name,
     serializer_class_name,
-    view_class_name_from_api_id,
+    view_class_name_from_path,
 )
 
-_QUERY_METHODS = {HttpMethod.GET}
+_QUERY_METHODS = {HttpMethod.GET, HttpMethod.DELETE}
+_ATOMIC_METHODS = {HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE}
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ class MethodRenderContext:
     request_serializer: str | None
     response_serializer: str | None
     uses_query_params: bool
+    uses_atomic: bool
+    no_content: bool
     path_params: tuple[PathParamContext, ...]
 
 
@@ -55,6 +58,7 @@ class ViewsModuleContext:
     path_validator_imports: tuple[str, ...] = field(default_factory=tuple)
     handlers_module: str = "handlers"
     handler_imports: tuple[str, ...] = field(default_factory=tuple)
+    needs_transaction: bool = False
 
 
 def build_views_context(
@@ -72,6 +76,7 @@ def build_views_context(
     serializer_names: set[str] = set()
     validator_names: set[str] = set()
     handler_names: set[str] = set()
+    needs_transaction = False
 
     for path in sorted(grouped.keys(), key=lambda p: ("{" in p, p)):
         endpoints = grouped[path]
@@ -79,6 +84,7 @@ def build_views_context(
         views.append(view)
         for method in view.methods:
             handler_names.add(method.handler_function)
+            needs_transaction = needs_transaction or method.uses_atomic
             if method.request_serializer:
                 serializer_names.add(method.request_serializer)
             if method.response_serializer:
@@ -95,6 +101,7 @@ def build_views_context(
         path_validator_imports=tuple(sorted(validator_names)),
         handlers_module=handlers_module,
         handler_imports=tuple(sorted(handler_names)),
+        needs_transaction=needs_transaction,
     )
 
 
@@ -130,9 +137,8 @@ def _build_view(
             fix="Keep at most one endpoint per HTTP method for each path.",
         )
 
-    method_order = [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT]
+    method_order = [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE]
     methods: list[MethodRenderContext] = []
-    primary_api_id = endpoints[0].id
 
     for method in method_order:
         endpoint = by_method.get(method)
@@ -154,12 +160,16 @@ def _build_view(
                 uses_query_params=bool(
                     endpoint.method in _QUERY_METHODS and request_serializer
                 ),
+                uses_atomic=endpoint.method in _ATOMIC_METHODS,
+                no_content=bool(
+                    endpoint.method == HttpMethod.DELETE and response_serializer is None
+                ),
                 path_params=params,
             )
         )
 
     return ViewRenderContext(
-        class_name=view_class_name_from_api_id(primary_api_id),
+        class_name=view_class_name_from_path(path),
         path=path,
         methods=tuple(methods),
         path_params=params,

@@ -68,15 +68,26 @@ def test_views_and_urls_generate() -> None:
     assert "handle_get_product" in views
     assert "handle_update_product" in views
     assert "ProductDetailResponseSerializer" in views
-    assert "response_serializer" in views
-    assert "return Response(response_serializer.data)" in views
+    assert "response_serializer" in views or "instance=payload" in views
+    assert "return Response(" in views
+    assert "instance=payload" in views
+    assert "response_serializer.is_valid" not in views
     assert "NotImplementedError" not in views
+    assert "except APIException:" in views
+    assert "InternalServerError" in views
+    assert "logger.exception" in views
+    assert "内部エラーが発生しました。" in views
+    assert "raise InternalServerError()" in views
+    assert "return Response(\n                {\"detail\":" not in views
+    assert "str(exc)" not in views
+    assert "transaction.atomic()" in views
+    assert "from django.db import transaction" in views
     assert "def handle_get_product(" in handlers
     assert "def handle_update_product(" in handlers
     assert "product_id" in views
     assert "validate_product_id" in views
     assert "ValidationError" in path_validators
-    assert "get-product" in urls or "list-products" not in urls
+    assert "get-product" in urls or "api-products" in urls
     assert "<str:product_id>" in urls
     ast.parse(views)
     ast.parse(handlers)
@@ -90,6 +101,105 @@ def test_put_api_includes_path_parameter() -> None:
     assert "product_id: str" in views
     assert "request.data" in views
     assert "request.query_params" not in views.split("def put(")[1].split("def ")[0]
+    put_body = views.split("def put(")[1].split("def ")[0]
+    assert "with transaction.atomic():" in put_body
+    assert put_body.index("is_valid(raise_exception=True)") < put_body.index(
+        "with transaction.atomic():"
+    )
+    get_body = views.split("def get(")[1].split("def ")[0]
+    assert "with transaction.atomic():" not in get_body
+
+
+def test_delete_api_generates_view_and_handler() -> None:
+    spec = ApiSpec(
+        version=1,
+        apis=[
+            ApiEndpoint(
+                id="getProduct",
+                name="詳細",
+                method=HttpMethod.GET,
+                path="/api/products/{productId}",
+                requestType=None,
+                responseType="ProductDetailResponse",
+            ),
+            ApiEndpoint(
+                id="deleteProduct",
+                name="削除",
+                method=HttpMethod.DELETE,
+                path="/api/products/{productId}",
+                requestType=None,
+                responseType=None,
+            ),
+        ],
+        types={
+            "ProductDetailResponse": TypeDefinition(
+                fields={
+                    "productId": FieldDefinition(type="string", required=True, nullable=False),
+                }
+            ),
+        },
+        path_parameters={
+            "productId": PathParameterDefinition(
+                type="string",
+                constraints=FieldConstraints(max_length=50),
+            ),
+        },
+    )
+    files = generate_code_files(spec, target=GenerateTarget.ALL, package_name="product")
+    views = files["product_views.py"]
+    handlers = files["product_handlers.py"]
+    openapi = files["openapi.yaml"]
+    assert "def delete(" in views
+    assert "handle_delete_product" in views
+    assert "validate_product_id" in views.split("def delete(")[1]
+    assert "request.data" not in views.split("def delete(")[1].split("def ")[0]
+    assert "with transaction.atomic():" in views.split("def delete(")[1].split("def ")[0]
+    assert "HTTP_204_NO_CONTENT" in views.split("def delete(")[1].split("def ")[0]
+    assert "ApiProductsProductIdAPIView" in views
+    assert "def handle_delete_product(" in handlers
+    assert "delete:" in openapi
+    assert "operationId: deleteProduct" in openapi
+    assert "No Content" in openapi
+    assert "204" in openapi
+    assert "ApiProductsProductIdAPIView" in files["urls.py"]
+    assert 'name="api-products-product-id"' in files["urls.py"]
+    ast.parse(views)
+    ast.parse(handlers)
+
+
+def test_delete_with_query_params_uses_query_serializer() -> None:
+    spec = ApiSpec(
+        version=1,
+        apis=[
+            ApiEndpoint(
+                id="deleteProduct",
+                name="削除",
+                method=HttpMethod.DELETE,
+                path="/api/products/{productId}",
+                requestType="ProductDeleteQuery",
+                responseType=None,
+            ),
+        ],
+        types={
+            "ProductDeleteQuery": TypeDefinition(
+                fields={
+                    "force": FieldDefinition(type="boolean", required=False, nullable=False),
+                }
+            ),
+        },
+        path_parameters={
+            "productId": PathParameterDefinition(
+                type="string",
+                constraints=FieldConstraints(max_length=50),
+            ),
+        },
+    )
+    files = generate_code_files(spec, target=GenerateTarget.ALL, package_name="product")
+    views = files["product_views.py"]
+    delete_body = views.split("def delete(")[1].split("def ")[0]
+    assert "ProductDeleteQuerySerializer" in delete_body
+    assert "request.query_params" in delete_body
+    assert "request.data" not in delete_body
 
 
 def test_get_with_path_and_query_parameters() -> None:

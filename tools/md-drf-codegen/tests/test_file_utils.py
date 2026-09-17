@@ -23,6 +23,54 @@ def test_force_overwrites(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == "new"
 
 
+def test_preserve_if_exists_skips_even_with_force(tmp_path: Path) -> None:
+    handlers = tmp_path / "product_handlers.py"
+    handlers.write_text("custom", encoding="utf-8")
+    views = tmp_path / "product_views.py"
+    views.write_text("old", encoding="utf-8")
+    written = write_generated_files(
+        {
+            "product_handlers.py": "generated-handlers",
+            "product_views.py": "generated-views",
+        },
+        tmp_path,
+        force=True,
+        preserve_if_exists=frozenset({"product_handlers.py"}),
+    )
+    assert handlers.read_text(encoding="utf-8") == "custom"
+    assert views.read_text(encoding="utf-8") == "generated-views"
+    assert handlers.resolve() not in written
+
+
+def test_force_preserved_overwrites_handlers(tmp_path: Path) -> None:
+    handlers = tmp_path / "product_handlers.py"
+    handlers.write_text("custom", encoding="utf-8")
+    write_generated_files(
+        {"product_handlers.py": "generated-handlers"},
+        tmp_path,
+        force=True,
+        preserve_if_exists=frozenset({"product_handlers.py"}),
+        force_preserved=True,
+    )
+    assert handlers.read_text(encoding="utf-8") == "generated-handlers"
+
+
+def test_check_skips_preserved_existing_files(tmp_path: Path) -> None:
+    handlers = tmp_path / "product_handlers.py"
+    handlers.write_text("custom", encoding="utf-8")
+    views = tmp_path / "product_views.py"
+    views.write_text("generated-views\n", encoding="utf-8")
+    write_generated_files(
+        {
+            "product_handlers.py": "would-differ",
+            "product_views.py": "generated-views\n",
+        },
+        tmp_path,
+        check=True,
+        preserve_if_exists=frozenset({"product_handlers.py"}),
+    )
+
+
 def test_check_detects_diff(tmp_path: Path) -> None:
     target = tmp_path / "out.py"
     target.write_text("old\n", encoding="utf-8")

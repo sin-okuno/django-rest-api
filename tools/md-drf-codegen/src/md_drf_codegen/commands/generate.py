@@ -19,6 +19,7 @@ def run_generate(
     target: str = "all",
     force: bool = False,
     check: bool = False,
+    force_handlers: bool = False,
 ) -> list[Path]:
     input_abs = yaml_path.resolve()
     generate_target = GenerateTarget(target)
@@ -56,7 +57,13 @@ def run_generate(
     output_dir = _resolve_output_dir(output, yaml_stem=input_abs.stem)
     package_name = sanitize_module_name(output_dir.name)
     files = generate_from_yaml(input_abs, target=generate_target, package_name=package_name)
-    return write_generation_result(files, output_dir, force=force, check=check)
+    return write_generation_result(
+        files,
+        output_dir,
+        force=force,
+        check=check,
+        force_handlers=force_handlers,
+    )
 
 
 def _resolve_output_dir(output: Path | None, *, yaml_stem: str) -> Path:

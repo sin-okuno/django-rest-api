@@ -104,6 +104,38 @@ def view_class_name_from_api_id(api_id: str) -> str:
     return f"{snake_to_pascal(camel_to_snake(api_id))}APIView"
 
 
+def view_class_name_from_path(path: str) -> str:
+    """Map ``/api/products/{productId}`` to ``ApiProductsProductIdAPIView``."""
+    parts: list[str] = []
+    for segment in path.strip("/").split("/"):
+        if not segment:
+            continue
+        param_match = re.fullmatch(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", segment)
+        if param_match:
+            parts.append(snake_to_pascal(camel_to_snake(param_match.group(1))))
+        else:
+            parts.append(snake_to_pascal(camel_to_snake(segment)))
+    if not parts:
+        return "RootAPIView"
+    return "".join(parts) + "APIView"
+
+
+def url_name_from_path(path: str) -> str:
+    """Map ``/api/products/{productId}`` to ``api-products-product-id``."""
+    parts: list[str] = []
+    for segment in path.strip("/").split("/"):
+        if not segment:
+            continue
+        param_match = re.fullmatch(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", segment)
+        if param_match:
+            snake = camel_to_snake(param_match.group(1))
+            parts.append(snake.replace("_", "-"))
+        else:
+            snake = camel_to_snake(segment)
+            parts.append(_NON_ALNUM.sub("-", snake).strip("-"))
+    return "-".join(part for part in parts if part)
+
+
 def path_param_names(path: str) -> tuple[str, ...]:
     """Return camelCase path parameter names in appearance order."""
     return tuple(_PATH_PARAM.findall(path))

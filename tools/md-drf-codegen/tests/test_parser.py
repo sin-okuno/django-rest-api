@@ -11,6 +11,7 @@ from md_drf_codegen.parser import (
     parse_path_parameters,
     parse_type_definitions,
 )
+from md_drf_codegen.schema import HttpMethod
 
 
 def test_parse_api_list() -> None:
@@ -71,7 +72,7 @@ def test_unsupported_method_raises() -> None:
 
 | API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
 | --- | --- | --- | --- | --- | --- |
-| deleteProduct | 削除 | DELETE | /api/products/1 | - | null |
+| patchProduct | 部分更新 | PATCH | /api/products/1 | - | null |
 
 ## 型定義
 
@@ -81,6 +82,34 @@ def test_unsupported_method_raises() -> None:
     doc = parse_markdown_content(content, source_path="x.md")
     with pytest.raises(SchemaValidationError):
         parse_api_endpoints(doc)
+
+
+def test_parse_delete_method() -> None:
+    content = """# T
+
+## API一覧
+
+| API ID | API名 | メソッド | パス | リクエスト型 | レスポンス型 |
+| --- | --- | --- | --- | --- | --- |
+| deleteProduct | 削除 | DELETE | /api/products/{productId} | - | - |
+
+## パスパラメータ
+
+| パラメータ名 | 型 | 制約 |
+| --- | --- | --- |
+| productId | string | 最大20文字 |
+
+## 型定義
+
+| 型名 | プロパティ | 型 | 必須 | Nullable |
+| --- | --- | --- | --- | --- |
+| ProductDetailResponse | productId | string | true | false |
+"""
+    doc = parse_markdown_content(content, source_path="x.md")
+    apis = parse_api_endpoints(doc)
+    assert apis[0].method == HttpMethod.DELETE
+    assert apis[0].request_type is None
+    assert apis[0].response_type is None
 
 
 def test_parse_legacy_type_definitions() -> None:

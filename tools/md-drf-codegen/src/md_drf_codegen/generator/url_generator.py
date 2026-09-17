@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 from md_drf_codegen.generator.view_generator import build_views_context
 from md_drf_codegen.schema import ApiSpec
 from md_drf_codegen.utils.naming import (
-    api_id_to_url_name,
     artifact_module_names,
     django_route,
     is_dynamic_path,
+    url_name_from_path,
 )
 
 
@@ -50,7 +50,7 @@ def build_urls_context(
             UrlPatternContext(
                 django_route=django_route(api.path),
                 view_class=view.class_name,
-                name=api_id_to_url_name(api.id),
+                name=url_name_from_path(api.path),
                 is_dynamic=is_dynamic_path(api.path),
                 path=api.path,
             )

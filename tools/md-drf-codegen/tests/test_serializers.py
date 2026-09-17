@@ -107,6 +107,106 @@ def test_integer_range_constraint() -> None:
     ast.parse(code)
 
 
+def test_number_uses_decimal_field() -> None:
+    from md_drf_codegen.schema.constraints import FieldConstraints
+
+    spec = _spec_with_types(
+        {
+            "Sample": TypeDefinition(
+                fields={
+                    "price": FieldDefinition(
+                        type="number",
+                        required=True,
+                        nullable=False,
+                        constraints=FieldConstraints(min=1, max=999999),
+                    )
+                }
+            )
+        }
+    )
+    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
+    code = next(iter(files.values()))
+    assert "DecimalField" in code
+    assert "FloatField" not in code
+    assert "max_digits=20" in code
+    assert "decimal_places=6" in code
+    assert "min_value=1" in code
+    assert "max_value=999999" in code
+    ast.parse(code)
+
+
+def test_response_only_types_are_read_only() -> None:
+    from md_drf_codegen.schema import ApiEndpoint, HttpMethod, PathParameterDefinition
+
+    spec = ApiSpec(
+        version=1,
+        apis=[
+            ApiEndpoint(
+                id="getItem",
+                name="詳細",
+                method=HttpMethod.GET,
+                path="/api/items/{itemId}",
+                requestType="ItemQuery",
+                responseType="ItemResponse",
+            ),
+            ApiEndpoint(
+                id="updateItem",
+                name="更新",
+                method=HttpMethod.PUT,
+                path="/api/items/{itemId}",
+                requestType="ItemUpdateRequest",
+                responseType="ItemResponse",
+            ),
+        ],
+        pathParameters={
+            "itemId": PathParameterDefinition(type="string"),
+        },
+        types={
+            "ItemQuery": TypeDefinition(
+                fields={
+                    "includeDeleted": FieldDefinition(
+                        type="boolean", required=False, nullable=False
+                    )
+                }
+            ),
+            "ItemUpdateRequest": TypeDefinition(
+                fields={
+                    "price": FieldDefinition(type="number", required=True, nullable=False)
+                }
+            ),
+            "ItemResponse": TypeDefinition(
+                fields={
+                    "price": FieldDefinition(type="number", required=True, nullable=False),
+                    "name": FieldDefinition(type="string", required=True, nullable=False),
+                }
+            ),
+            "Orphan": TypeDefinition(
+                fields={"note": FieldDefinition(type="string", required=True, nullable=False)}
+            ),
+        },
+    )
+    files = generate_code_files(spec, target=GenerateTarget.SERIALIZER, package_name="sample")
+    code = next(iter(files.values()))
+
+    assert "class ItemResponseSerializer" in code
+    assert "read_only=True, max_digits=20, decimal_places=6" in code
+    assert "allow_blank=False, read_only=True" in code
+
+    assert "class ItemUpdateRequestSerializer" in code
+    assert "max_digits=20, decimal_places=6" in code
+    update_block = code.split("class ItemUpdateRequestSerializer")[1].split("class ")[0]
+    assert "read_only=True" not in update_block
+
+    assert "class ItemQuerySerializer" in code
+    query_block = code.split("class ItemQuerySerializer")[1].split("class ")[0]
+    assert "read_only=True" not in query_block
+
+    assert "class OrphanSerializer" in code
+    orphan_block = code.split("class OrphanSerializer")[1]
+    assert "read_only=True" not in orphan_block
+    ast.parse(code)
+
+
 def test_date_and_datetime_fields() -> None:
     spec = _spec_with_types(
         {

@@ -7,6 +7,7 @@
 | listProducts | 製品一覧取得 | GET | /api/products | ProductListRequest | ProductListResponse | キーワード検索・ページング |
 | getProduct | 製品詳細取得 | GET | /api/products/{productId} | ProductDetailQuery | ProductDetailResponse | - |
 | updateProduct | 製品更新 | PUT | /api/products/{productId} | ProductUpdateRequest | ProductDetailResponse | 楽観ロック（revision） |
+| deleteProduct | 製品削除 | DELETE | /api/products/{productId} | - | - | レスポンス型なし → 204 No Content |
 
 ## パスパラメータ
 

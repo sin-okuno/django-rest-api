@@ -106,7 +106,8 @@ def test_generate_all_target(tmp_path: Path) -> None:
     views = (out_dir / "product_views.py").read_text(encoding="utf-8")
     assert "handle_update_product" in views
     assert "ProductDetailResponseSerializer" in views
-    assert "response_serializer" in views
+    assert "response_serializer" in views or "instance=payload" in views
+    assert "instance=payload" in views
     assert "def put(" in views
     handlers = (out_dir / "product_handlers.py").read_text(encoding="utf-8")
     assert "def handle_update_product(" in handlers
@@ -134,6 +135,43 @@ def test_generate_force_overwrites(tmp_path: Path) -> None:
         ["generate", str(yaml_out), "-o", str(out_dir), "--target", "serializer", "--force"],
     )
     assert result.exit_code == 0, result.output
+
+
+def test_force_preserves_handlers_unless_force_handlers(tmp_path: Path) -> None:
+    yaml_out = tmp_path / "product-api.yaml"
+    runner.invoke(app, ["extract", str(FIXTURE), "-o", str(yaml_out)])
+    out_dir = tmp_path / "product"
+    first = runner.invoke(app, ["generate", str(yaml_out), "-o", str(out_dir), "--target", "all"])
+    assert first.exit_code == 0, first.output
+
+    handlers = out_dir / "product_handlers.py"
+    marker = "# CUSTOM BUSINESS LOGIC MARKER\n"
+    handlers.write_text(marker + handlers.read_text(encoding="utf-8"), encoding="utf-8")
+
+    second = runner.invoke(
+        app,
+        ["generate", str(yaml_out), "-o", str(out_dir), "--target", "all", "--force"],
+    )
+    assert second.exit_code == 0, second.output
+    assert marker in handlers.read_text(encoding="utf-8")
+    assert "logger.exception" in (out_dir / "product_views.py").read_text(encoding="utf-8")
+
+    third = runner.invoke(
+        app,
+        [
+            "generate",
+            str(yaml_out),
+            "-o",
+            str(out_dir),
+            "--target",
+            "all",
+            "--force",
+            "--force-handlers",
+        ],
+    )
+    assert third.exit_code == 0, third.output
+    assert marker not in handlers.read_text(encoding="utf-8")
+    assert "CREATE-ONCE FILE" in handlers.read_text(encoding="utf-8")
 
 
 def test_build_command(tmp_path: Path, monkeypatch) -> None:

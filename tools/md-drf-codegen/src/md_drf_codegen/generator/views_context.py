@@ -112,12 +112,11 @@ def _build_view(path: str, endpoints: list[ApiEndpoint]) -> ViewRenderContext:
     seen_methods: set[HttpMethod] = set()
     methods: list[MethodRenderContext] = []
 
-    # Stable order: GET, POST, PUT, PATCH, DELETE
+    # Stable order: GET, POST, PUT, DELETE
     method_order = [
         HttpMethod.GET,
         HttpMethod.POST,
         HttpMethod.PUT,
-        HttpMethod.PATCH,
         HttpMethod.DELETE,
     ]
     by_method = {endpoint.method: endpoint for endpoint in endpoints}

@@ -59,6 +59,7 @@ def render_views(context: ViewsModuleContext) -> str:
         path_validators_module=context.path_validators_module,
         handler_imports=context.handler_imports,
         handlers_module=context.handlers_module,
+        needs_transaction=context.needs_transaction,
     )
 
 

@@ -14,7 +14,9 @@ from md_drf_codegen.utils.naming import (
     path_param_names,
     sanitize_module_name,
     serializer_class_name,
+    url_name_from_path,
     view_class_name_from_api_id,
+    view_class_name_from_path,
 )
 from md_drf_codegen.utils.python_validator import validate_python_syntax
 
@@ -29,7 +31,9 @@ __all__ = [
     "path_param_names",
     "sanitize_module_name",
     "serializer_class_name",
+    "url_name_from_path",
     "validate_python_syntax",
     "view_class_name_from_api_id",
+    "view_class_name_from_path",
     "write_generated_files",
 ]

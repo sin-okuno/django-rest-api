@@ -5,6 +5,8 @@ from md_drf_codegen.utils.naming import (
     camel_to_snake,
     django_route,
     serializer_class_name,
+    url_name_from_path,
+    view_class_name_from_path,
 )
 
 
@@ -30,6 +32,19 @@ def test_django_route() -> None:
 
 def test_api_id_to_url_name() -> None:
     assert api_id_to_url_name("getProduct") == "get-product"
+
+
+def test_view_class_name_from_path() -> None:
+    assert view_class_name_from_path("/api/products") == "ApiProductsAPIView"
+    assert (
+        view_class_name_from_path("/api/products/{productId}")
+        == "ApiProductsProductIdAPIView"
+    )
+
+
+def test_url_name_from_path() -> None:
+    assert url_name_from_path("/api/products") == "api-products"
+    assert url_name_from_path("/api/products/{productId}") == "api-products-product-id"
 
 
 def test_serializer_class_name() -> None:

@@ -104,7 +104,7 @@ pip install -e ".[dev]"
 
 ### パスパラメータとクエリパラメータ
 
-#### パスパラメータ（GET / POST / PUT 共通）
+#### パスパラメータ（GET / POST / PUT / DELETE 共通）
 
 パス列の `{name}` プレースホルダで指定します。型定義テーブルには**載せません**（URL から自動抽出）。
 
@@ -128,20 +128,27 @@ API パスで使う `{productId}` は、上表に必ず定義してください�
 `updateProduct` のように **PUT / POST でもパスパラメータは同様にメソッド引数**として生成されます。リクエストボディは `request.data`、パス値は引数で受け取ります。
 
 ```python
-def put(
-    self,
-    request: Request,
-    product_id: str,
-) -> Response:
-    product_id = validate_product_id(product_id)
-    serializer = ProductUpdateRequestSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    ...
+def put(...) -> Response:
+    try:
+        ...
+        with transaction.atomic():
+            payload = handle_update_product(...)
+        return Response(ProductDetailResponseSerializer(instance=payload).data)
+    except APIException:
+        raise
+    except Exception as exc:
+        logger.exception(...)
+        raise InternalServerError() from exc  # DRF exception handler へ委譲
 ```
 
-#### クエリパラメータ（GET のみ）
+POST / PUT / DELETE の `transaction.atomic()` は **Handler 呼び出しのみ**を囲みます（パス検証・リクエスト Serializer 検証・レスポンス整形は外）。  
+レスポンスは入力検証（`data=` + `is_valid`）せず、`Serializer(instance=payload).data` で整形します。  
+予期しない例外はログに残し、固定メッセージの `APIException` サブクラスを再送出して **DRF の exception handler** に処理させます（View 内で 500 Response を自作しません）。
 
-GET API で検索条件・ページングなどを渡す場合は、**リクエスト型**にクエリパラメータのフィールドを定義します。
+#### クエリパラメータ（GET / DELETE）
+
+GET / DELETE で検索条件・オプションなどを渡す場合は、**リクエスト型**にクエリパラメータのフィールドを定義します。  
+DELETE でリクエスト型が不要な場合は `-` にします。
 
 | API ID | メソッド | パス | リクエスト型 | 意味 |
 |--------|---------|------|-------------|------|
@@ -168,6 +175,7 @@ def get(
 | listProducts | 製品一覧取得 | GET | /api/products | ProductListRequest | ProductListResponse | キーワード検索 |
 | getProduct | 製品詳細取得 | GET | /api/products/{productId} | ProductDetailQuery | ProductDetailResponse | - |
 | updateProduct | 製品更新 | PUT | /api/products/{productId} | ProductUpdateRequest | ProductDetailResponse | 楽観ロック |
+| deleteProduct | 製品削除 | DELETE | /api/products/{productId} | - | - | レスポンス型なし → 204 |
 
 | 型名 | プロパティ | 型 | 必須 | Nullable | 制約 | 備考 |
 | ProductListRequest | keyword | string | false | false | 最大50文字 | 部分一致 |
@@ -183,8 +191,8 @@ def get(
 
 | パラメータ種別 | 指定方法 | 対象メソッド | 生成コード |
 |---------------|---------|-------------|-----------|
-| パスパラメータ | パス列の `{productId}` + `## パスパラメータ` | GET / POST / PUT | View 引数 + `{prefix}_path_validators.py` |
-| クエリパラメータ | リクエスト型のフィールド | GET のみ | `request.query_params` + Serializer |
+| パスパラメータ | パス列の `{productId}` + `## パスパラメータ` | GET / POST / PUT / DELETE | View 引数 + `{prefix}_path_validators.py` |
+| クエリパラメータ | リクエスト型のフィールド | GET / DELETE | `request.query_params` + Serializer |
 | リクエストボディ | リクエスト型のフィールド | POST / PUT | `request.data` + Serializer |
 
 <a id="arrays"></a>
@@ -276,7 +284,7 @@ OpenAPI ではクエリ配列を `style: form` / `explode: false`（カンマ区
 |-------------|----------------|---------|--------|
 | `string` | `CharField` | `string` | `"ABC"` |
 | `integer` | `IntegerField` | `integer` | `1` |
-| `number` | `FloatField` | `number` | `1.5` |
+| `number` | `DecimalField`（既定 `max_digits=20`, `decimal_places=6`） | `number` | `1.5` |
 | `boolean` | `BooleanField` | `boolean` | `true` |
 | `date` | `DateField` | `string` + `format: date` | `"2024-01-15"` |
 | `datetime` | `DateTimeField` | `string` + `format: date-time` | `"2024-01-15T12:00:00Z"` |
@@ -724,16 +732,20 @@ md-drf-codegen build examples/product.md --target all
 
 既存ファイルがある場合、通常はエラーになります。上書きするには `--force` を指定します。
 
+ただし `{prefix}_handlers.py` は業務実装の差し替え先のため、**`--force` だけでは上書きしません**。  
+スタブを作り直すときだけ `--force-handlers` を併用してください。
+
 ### `--check`
 
-ファイルを書き換えず、生成結果と既存ファイルの差分を検証します（CI 向け）。差分がある場合は非 0 終了します。
+ファイルを書き換えず、生成結果と既存ファイルの差分を検証します（CI 向け）。差分がある場合は非 0 終了します。  
+既存の `{prefix}_handlers.py` は内容比較の対象外です（存在すれば OK）。
 
 ## 生成ファイル一覧
 
 `--target all` 時:
 
 - `{prefix}_serializers.py`
-- `{prefix}_handlers.py`（デモレスポンス関数）
+- `{prefix}_handlers.py`（初回のみ生成 / create-once。デモ応答の差し替え先）
 - `{prefix}_path_validators.py`（パスパラメータ定義がある場合）
 - `{prefix}_views.py`
 - `urls.py`
@@ -756,11 +768,16 @@ md-drf-codegen generate product-api.yaml \
 
 ## 設計判断
 
-- `number` 型は初期実装では `FloatField` を使用します（YAML に Decimal 精度情報がないため）。
+- `number` 型は `DecimalField`（既定 `max_digits=20`, `decimal_places=6`）を生成します。金額・数量の float 精度リスクを避けるためです。
+- API一覧で **レスポンス型にのみ** 使われる型（およびそのネスト）のフィールドは `read_only=True` になります。リクエスト型にも現れる型は書き込み用のままです。
 - Enum の ChoiceField は標準 `Enum` 向け（`[(m.value, m.name) for m in X]`）。Django `IntegerChoices` も動作しますが、既存定数は標準 `Enum` を想定しています。
 - View は薄い委譲層とし、業務処理は `{prefix}_handlers.py` の関数に切り出します（初期実装はデモデータを返します）。
-- Handler の戻り値はレスポンス型の Serializer で検証してから `Response` に載せます。
-- 同一パスに複数 HTTP メソッドがある場合、1 つの `APIView` にまとめます（Django URL ルーティングの制約）。
+- Handler の戻り値はレスポンス型 Serializer の `instance=` で整形してから `Response` に載せます（入力用 `is_valid` は使いません）。
+- View は `APIException`（`ValidationError` 含む）を再送出し、予期しない例外はログ後に `InternalServerError`（固定 detail）へ変換して DRF の exception handler に委譲します。
+- POST / PUT / DELETE は Handler 呼び出しを `with transaction.atomic():` で囲みます（パス検証・入力 Serializer・レスポンス整形は外。GET は対象外）。
+- `{prefix}_handlers.py` は **初回のみ生成**（create-once）。`--force` では上書きせず、意図的な再生成時のみ `--force-handlers` を使います。
+- 同一パスに複数 HTTP メソッドがある場合、1 つの `APIView` にまとめます。クラス名 / URL name はパス由来（例: `ApiProductsProductIdAPIView` / `api-products-product-id`）。
+- DELETE でレスポンス型が無い場合は **204 No Content** を返します。
 
 ## 注意事項
 
@@ -772,15 +789,15 @@ md-drf-codegen generate product-api.yaml \
 
 ## 制約事項
 
-- 対応 HTTP メソッド: GET, POST, PUT（PATCH / DELETE は将来拡張）
+- 対応 HTTP メソッド: GET, POST, PUT, DELETE（PATCH は将来拡張）
 - 対応プリミティブ型: `string` / `integer` / `number` / `boolean` / `date` / `datetime` / `object`
 - 未知の型は Validation Error
 - `date` / `datetime` / `boolean` / `object` には制約列を付けない（`-`）
 
 ## 今後の拡張候補
 
-- PATCH / DELETE 対応
-- `DecimalField` の精度指定
+- PATCH 対応
+- Markdown からの `DecimalField` 精度（`max_digits` / `decimal_places`）明示指定
 - 日付範囲制約
 
 ## 開発

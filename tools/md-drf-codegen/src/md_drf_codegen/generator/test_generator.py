@@ -24,7 +24,7 @@ from md_drf_codegen.utils.naming import (
 _SAMPLE_VALUES: dict[str, Any] = {
     "string": "sample",
     "integer": 1,
-    "number": 1.0,
+    "number": "1.000000",
     "boolean": True,
     "date": "2024-01-15",
     "datetime": "2024-01-15T12:00:00Z",
@@ -88,6 +88,8 @@ class ViewMethodTest:
     path_kwargs: dict[str, str]
     request_data: dict[str, Any] | None
     uses_query_params: bool
+    expected_status: int = 200
+    expect_body: bool = True
 
 
 @dataclass(frozen=True)
@@ -229,6 +231,8 @@ def build_tests_context(spec: ApiSpec, *, package_name: str = "generated") -> Te
                     path_kwargs=path_kwargs,
                     request_data=request_data,
                     uses_query_params=bool(method.uses_query_params),
+                    expected_status=204 if method.no_content else 200,
+                    expect_body=not method.no_content,
                 )
             )
             if method.request_serializer and request_data:

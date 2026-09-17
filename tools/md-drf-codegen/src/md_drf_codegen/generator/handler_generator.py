@@ -17,7 +17,7 @@ from md_drf_codegen.utils.naming import (
 _SAMPLE_VALUES: dict[str, Any] = {
     "string": "sample",
     "integer": 1,
-    "number": 1.0,
+    "number": "1.000000",
     "boolean": True,
     "date": "2024-01-15",
     "datetime": "2024-01-15T12:00:00Z",
@@ -79,10 +79,7 @@ def _demo_fields_for_response(
     path_camel_to_snake: dict[str, str],
 ) -> tuple[DemoFieldContext, ...]:
     if response_type is None:
-        return (
-            DemoFieldContext(name="ok", value_expr="True"),
-            DemoFieldContext(name="demo", value_expr="True"),
-        )
+        return ()
     type_def = types.get(response_type)
     if type_def is None:
         return (
